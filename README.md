@@ -32,6 +32,36 @@ pnpm build
 pnpm start
 ```
 
+### Docker
+
+Build:
+
+```bash
+docker build -t copilot-mvp .
+```
+
+Run locally:
+
+```bash
+docker run --rm -p 3000:7860 copilot-mvp
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+Push to Docker Hub:
+
+```bash
+docker tag copilot-mvp <your-dockerhub-user>/copilot-mvp:latest
+docker push <your-dockerhub-user>/copilot-mvp:latest
+```
+
+Notes:
+
+- The image listens on port `7860`, which works well for Hugging Face Docker Spaces.
+- `Feature_1/` and `Feature_3/` are bundled into the image for local runs.
+- If `DATA_DIR` points to a mounted bucket path such as `/data`, the app prefers that data first and falls back to bundled feature folders when the mounted folder is absent.
+- `Feature_2` stays disabled until its assets/component exist.
+
 ### Lint
 
 ```bash

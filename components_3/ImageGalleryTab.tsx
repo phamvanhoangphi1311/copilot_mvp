@@ -50,10 +50,10 @@ export default function ImageGalleryTab({
   initialPoints = [],
   initialDir = "",
 }: ImageGalleryProps) {
-  const folderName = initialDir;
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [folderName, setFolderName] = useState(initialDir);
   const objectUrlsRef = useRef<string[]>([]);
 
   // Segmentation overlay state
@@ -145,7 +145,6 @@ export default function ImageGalleryTab({
       setLoading(false);
     }
     return () => revokeAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Decode overlay when image or toggle changes
@@ -222,45 +221,43 @@ export default function ImageGalleryTab({
     setSelectedIndex(null);
     const folder = folderName.trim().replace(/[/\\]+$/, "");
     try {
-      const imageUrl = folder
+      const url = folder
         ? `/api/images?dir=${encodeURIComponent(folder)}`
         : "/api/images";
-      const data = await fetch(imageUrl).then((r) => r.json());
+      const data = await fetch(url).then((r) => r.json());
       setImages(data.images ?? []);
     } catch {
       setImages([]);
     } finally {
       setLoading(false);
     }
-
-    const maskPromise = (!folder && initialMasks.length > 0)
-      ? Promise.resolve(initialMasks)
-      : fetch(
-          folder
-            ? `/api/masks?dir=${encodeURIComponent(folder)}`
-            : "/api/masks"
-        ).then((r) => r.json()).catch(() => []);
-
-    const pointsPromise = (!folder && initialPoints.length > 0)
-      ? Promise.resolve(initialPoints)
-      : fetch(
-          folder
-            ? `/api/points?dir=${encodeURIComponent(folder)}`
-            : "/api/points"
-        ).then((r) => r.json()).catch(() => []);
-
-    const [maskRecords, pointRecords] = await Promise.all([maskPromise, pointsPromise]);
-
-    if (Array.isArray(maskRecords)) {
-      loadMasksFromRecords(maskRecords);
+    // Use server-pre-fetched labels when no custom folder is set; otherwise fetch from the folder.
+    if (!folder && initialMasks.length > 0) {
+      loadMasksFromRecords(initialMasks);
     } else {
-      setMasksMap({});
+      try {
+        const url = folder
+          ? `/api/masks?dir=${encodeURIComponent(folder)}`
+          : "/api/masks";
+        const records = await fetch(url).then((r) => r.json());
+        if (Array.isArray(records)) loadMasksFromRecords(records);
+      } catch {
+        setMasksMap({});
+      }
     }
-
-    if (Array.isArray(pointRecords)) {
-      loadBoundaryFromRecords(pointRecords);
-    } else {
-      setBoundaryMap({});
+    // Use server-pre-fetched mask-points when no custom folder is set; otherwise fetch from the folder.
+    if (!folder && initialPoints.length > 0) {
+      loadBoundaryFromRecords(initialPoints);
+      } else {
+      try {
+        const url = folder
+          ? `/api/points?dir=${encodeURIComponent(folder)}`
+          : "/api/points";
+        const records = await fetch(url).then((r) => r.json());
+        if (Array.isArray(records)) loadBoundaryFromRecords(records);
+      } catch {
+        setBoundaryMap({});
+      }
     }
   }
 
@@ -322,6 +319,7 @@ export default function ImageGalleryTab({
 
       newImages.sort((a, b) => a.name.localeCompare(b.name));
       setImages(newImages);
+      setFolderName(dirHandle.name + "/");
 
       // Load masks.json from the chosen folder
       if (masksHandle) {
@@ -359,17 +357,18 @@ export default function ImageGalleryTab({
   }
 
   return (
-    <main className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
+    <main className="flex flex-1 flex-col overflow-hidden bg-[#05080c]">
       {/* Header bar */}
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2">
-        <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 shrink-0">
-          Image Gallery
-        </span>
+      <div className="flex items-center gap-3 border-b border-white/[0.06] bg-[#07111a]/80 px-5 py-3 backdrop-blur-xl">
+        <div className="shrink-0">
+          <div className="hud-kicker">Frame review</div>
+          <div className="text-sm font-semibold text-white">Image Gallery</div>
+        </div>
 
         <button
           onClick={handleChooseFolder}
           disabled={loading}
-          className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap disabled:opacity-50"
+          className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-white/[0.08] transition-colors whitespace-nowrap disabled:opacity-50"
         >
           Choose Folder…
         </button>
@@ -378,10 +377,10 @@ export default function ImageGalleryTab({
             {masksMap[selected.name] && (
               <button
                 onClick={() => setShowOverlay((v) => !v)}
-                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   showOverlay
                     ? "border-blue-500 bg-blue-500/20 text-blue-300"
-                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                    : "border-white/[0.08] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-zinc-100"
                 }`}
               >
                 {showOverlay ? "Hide Masks" : "Show Masks"}
@@ -390,10 +389,10 @@ export default function ImageGalleryTab({
             {boundaryMap[selected.name] && (
               <button
                 onClick={() => setShowBoundary((v) => !v)}
-                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   showBoundary
                     ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
-                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                    : "border-white/[0.08] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-zinc-100"
                 }`}
               >
                 {showBoundary ? "Hide Boundary" : "Show Boundary"}
@@ -402,21 +401,21 @@ export default function ImageGalleryTab({
             {linesMap[selected.name] && (
               <button
                 onClick={() => setShowLines((v) => !v)}
-                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   showLines
                     ? "border-orange-500 bg-orange-500/20 text-orange-300"
-                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                    : "border-white/[0.08] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-zinc-100"
                 }`}
               >
                 {showLines ? "Hide Lines" : "Show Lines"}
               </button>
             )}
-            <span className="text-xs text-zinc-500">
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-zinc-400">
               {selectedIndex !== null ? selectedIndex + 1 : ""} / {images.length}
             </span>
             <button
               onClick={() => setSelectedIndex(null)}
-              className="text-xs text-zinc-400 hover:text-zinc-100 transition-colors"
+              className="text-xs text-zinc-500 hover:text-zinc-100 transition-colors"
             >
               ✕ Close preview
             </button>
@@ -426,11 +425,11 @@ export default function ImageGalleryTab({
 
       {/* Full-screen preview */}
       {selected ? (
-        <div className="relative flex flex-1 items-center justify-center bg-black">
+        <div className="relative flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(67,199,255,0.08),transparent_26%),#020304]">
           {/* Prev button */}
           <button
             onClick={goPrev}
-            className="absolute left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/70 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+            className="absolute left-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.08] bg-black/45 text-zinc-300 backdrop-blur-md hover:bg-black/70 hover:text-white transition-colors"
             aria-label="Previous image"
           >
             ‹
@@ -485,17 +484,17 @@ export default function ImageGalleryTab({
           {/* Next button */}
           <button
             onClick={goNext}
-            className="absolute right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/70 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
+            className="absolute right-4 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.08] bg-black/45 text-zinc-300 backdrop-blur-md hover:bg-black/70 hover:text-white transition-colors"
             aria-label="Next image"
           >
             ›
           </button>
 
-          <p className="absolute bottom-4 text-xs text-zinc-400 pointer-events-none">{selected.name}</p>
+          <p className="absolute bottom-5 rounded-full border border-white/[0.08] bg-black/40 px-3 py-1.5 text-xs text-zinc-300 pointer-events-none backdrop-blur-md">{selected.name}</p>
         </div>
       ) : (
         /* Grid view */
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-5">
           {loading ? (
             <p className="text-sm text-zinc-500">Loading images…</p>
           ) : images.length === 0 ? (
@@ -514,17 +513,17 @@ export default function ImageGalleryTab({
                 <button
                   key={img.src}
                   onClick={() => setSelectedIndex(idx)}
-                  className="group flex flex-col overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-600 transition-colors text-left"
+                  className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] shadow-[0_16px_40px_rgba(0,0,0,0.22)] hover:border-cyan-300/30 hover:bg-white/[0.05] transition-all text-left"
                 >
-                  <div className="flex h-36 w-full items-center justify-center overflow-hidden bg-zinc-800">
+                  <div className="flex h-40 w-full items-center justify-center overflow-hidden bg-black/30">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={img.src}
                       alt={img.name}
-                      className="h-full w-full object-cover group-hover:opacity-80 transition-opacity"
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02] group-hover:opacity-90"
                     />
                   </div>
-                  <span className="truncate px-2 py-1.5 text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">
+                  <span className="truncate px-3 py-2 text-xs text-zinc-400 group-hover:text-zinc-100 transition-colors">
                     {img.name}
                   </span>
                 </button>

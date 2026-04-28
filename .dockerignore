@@ -1,0 +1,14 @@
+.git
+.gitignore
+.next
+node_modules
+npm-debug.log
+pnpm-lock.yaml
+pnpm-workspace.yaml
+Dockerfile
+.dockerignore
+scripts
+google-apps-script.js
+Feature_1
+Feature_2
+Feature_3

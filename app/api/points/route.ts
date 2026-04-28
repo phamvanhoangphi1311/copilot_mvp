@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, stat } from "fs/promises";
 import path from "path";
+import { getProjectRoot } from "@/lib/features";
 
 function isValidDirectory(dir: string): boolean {
   const normalized = path.resolve(dir);
@@ -26,13 +27,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "points.json not found" }, { status: 404 });
     }
   } else {
-    filePath = path.join(process.cwd(), "public", "points.json");
+    filePath = path.join(getProjectRoot(), "public", "points.json");
   }
 
   try {
     const raw = await readFile(filePath, "utf8");
-    return NextResponse.json(JSON.parse(raw));
+    return NextResponse.json(JSON.parse(raw), {
+      headers: {
+        "Cache-Control": "public, max-age=300",
+      },
+    });
   } catch {
-    return NextResponse.json([], { status: 200 });
+    return NextResponse.json([], {
+      status: 200,
+      headers: {
+        "Cache-Control": "public, max-age=60",
+      },
+    });
   }
 }

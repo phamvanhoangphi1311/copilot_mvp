@@ -20,6 +20,11 @@
 # production
 /build
 
+# local procedure data
+/Feature_1/
+/Feature_2/
+/Feature_3/
+
 # misc
 .DS_Store
 *.pem

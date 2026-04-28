@@ -12,14 +12,26 @@ export default function SideBar({ isOpen, zones }: SideBarProps) {
   const dangerZonesClassified = zones.filter((z) => classifyZone(z.name) === "danger");
   const safeZonesClassified = zones.filter((z) => classifyZone(z.name) === "safe");
   const otherZonesClassified = zones.filter((z) => classifyZone(z.name) === "other");
+  const keepOutCount = dangerZonesClassified.length;
+  const safeCount = safeZonesClassified.length;
+  const contextCount = otherZonesClassified.length;
 
   return (
     <aside className="flex h-full w-64 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* <AIPanel /> */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+            Operative Summary
+          </p>
+          <div className="mt-3 grid gap-2">
+            <MetricRow label="Keep-out" value={keepOutCount} tone="text-rose-400" />
+            <MetricRow label="Safe corridor" value={safeCount} tone="text-emerald-400" />
+            <MetricRow label="Reference" value={contextCount} tone="text-zinc-300" />
+          </div>
+        </div>
         <div>
           <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Surgery Phase
+            Procedure Timeline
           </h3>
           <div className="mt-2 space-y-3">
             <div>
@@ -49,7 +61,7 @@ export default function SideBar({ isOpen, zones }: SideBarProps) {
         </div>
         <div>
           <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Danger Zones
+            Critical Keep-Out
           </h3>
           <div className="mt-2">
             <DangerZonesContent zones={dangerZonesClassified} />
@@ -58,7 +70,7 @@ export default function SideBar({ isOpen, zones }: SideBarProps) {
         {safeZonesClassified.length > 0 && (
           <div>
             <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              Safe Zones
+              Safe Corridor
             </h3>
             <div className="mt-2">
               <SafeZonesContent zones={safeZonesClassified} />
@@ -68,7 +80,7 @@ export default function SideBar({ isOpen, zones }: SideBarProps) {
         {otherZonesClassified.length > 0 && (
           <div>
             <h3 className="py-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              Other
+              Reference Structures
             </h3>
             <div className="mt-2">
               <OtherZonesContent zones={otherZonesClassified} />
@@ -77,6 +89,23 @@ export default function SideBar({ isOpen, zones }: SideBarProps) {
         )}
       </div>
     </aside>
+  );
+}
+
+function MetricRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2">
+      <span className="text-xs text-zinc-400">{label}</span>
+      <span className={`text-sm font-semibold ${tone}`}>{value}</span>
+    </div>
   );
 }
 

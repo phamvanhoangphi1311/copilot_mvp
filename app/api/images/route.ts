@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, readdir, stat } from "fs/promises";
 import path from "path";
+import { getProjectRoot } from "@/lib/features";
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"]);
 
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
     buildSrc = (f: string) =>
       `/api/images?dir=${encodeURIComponent(resolvedFeatureDir)}&file=${encodeURIComponent(f)}`;
   } else {
-    framesDir = path.join(process.cwd(), "public", "frames");
+    framesDir = path.join(getProjectRoot(), "public", "frames");
     buildSrc = (f: string) => `/frames/${f}`;
   }
 
@@ -87,6 +88,9 @@ export async function GET(req: NextRequest) {
     .filter((f) => IMAGE_EXTENSIONS.has(path.extname(f).toLowerCase()))
     .map((f) => ({ name: f, src: buildSrc(f) }));
 
-  return NextResponse.json({ images });
+  return NextResponse.json({ images }, {
+    headers: {
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }
-
