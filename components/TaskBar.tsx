@@ -63,14 +63,14 @@ export default function TaskBar({
               Procedure Focus
             </p>
             <p className="truncate text-xs text-zinc-300">
-              {activeFeature?.summary ?? "Feature-specific surgical guidance"}
+              {activeFeature?.summary ?? "Phase-specific surgical guidance"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
           <div>
             <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-              Feature
+              Phase
             </p>
             <div className="relative mt-1" ref={featureMenuRef}>
               <button

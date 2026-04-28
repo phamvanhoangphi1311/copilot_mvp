@@ -4,10 +4,10 @@
  * Role-based color system optimized for contrast against cardiac tissue
  * (warm pinks, reds, oranges). Complementary cool tones stand out best.
  *
- *   TARGET  = cyan        — suture target, max visibility
- *   AVOID   = magenta     — critical structure, stay away
- *   CAUTION = gold        — be aware
- *   TOOL    = green/teal  — instruments
+ *   TARGET  = green       — suture target, max visibility
+ *   AVOID   = red         — critical structure, stay away
+ *   CAUTION = orange      — be aware
+ *   TOOL    = blue/teal   — instruments
  */
 
 // ── Boundary line ─────────────────────────────────────────────────────────
@@ -88,10 +88,10 @@ export const annotationLine = {
 
 // ── NEON COLORS ──────────────────────────────────────────────────────────
 export const KNOWN_COLORS: Record<string, string> = {
-  "Aortic root": "#00E5FF",
-  "Auricles": "#FF44FF",
-  "Epicardial fat on aortic": "#FFD700",
-  "Grasper": "#00FF88",
+  "Aortic root": "#22C55E",
+  "Auricles": "#EF4444",
+  "Epicardial fat on aortic": "#FFAA00",
+  "Grasper": "#3B82F6",
   "Needle holders": "#88EEFF",
 };
 
@@ -99,10 +99,10 @@ export const EXTRA_COLORS: string[] = ["#AA66FF", "#FF44AA", "#00FFCC", "#FFEE00
 
 // ── Role → color mapping ─────────────────────────────────────────────────
 export const ROLE_COLORS: Record<string, string> = {
-  target: "#00E5FF",
-  avoid: "#FF44FF",
-  caution: "#FFD700",
-  tool: "#00FF88",
+  target: "#22C55E",
+  avoid: "#EF4444",
+  caution: "#FFAA00",
+  tool: "#3B82F6",
   unknown: "#AA66FF",
 };
 

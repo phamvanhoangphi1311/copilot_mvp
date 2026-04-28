@@ -48,7 +48,7 @@ async function buildFeatureConfigs(): Promise<FeatureConfig[]> {
   return [
     {
       id: "feature_1",
-      label: "Feature 1",
+      label: "Phase 1",
       dir: feature1Dir,
       enabled: feature1Exists,
       disabledReason: feature1Exists ? undefined : "Missing folder",
@@ -56,7 +56,7 @@ async function buildFeatureConfigs(): Promise<FeatureConfig[]> {
     },
     {
       id: "feature_2",
-      label: "Feature 2",
+      label: "Phase 2",
       dir: feature2Dir,
       enabled: feature2Exists,
       disabledReason: feature2Exists ? undefined : "Coming soon",
@@ -68,7 +68,7 @@ async function buildFeatureConfigs(): Promise<FeatureConfig[]> {
     },
     {
       id: "feature_3",
-      label: "Feature 3",
+      label: "Phase 3",
       dir: feature3Dir,
       enabled: feature3Exists && feature3ComponentExists,
       disabledReason: feature3Exists

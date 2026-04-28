@@ -114,7 +114,7 @@ export default function SideBar({
             <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 ${jb}`}>
               Phase State
             </p>
-            <p className={`mt-1 text-[15px] font-semibold ${hasNeedle ? "text-cyan-300" : hasGrasper ? "text-emerald-300" : "text-zinc-300"} ${jb}`}>
+            <p className={`mt-1 text-[15px] font-semibold ${hasNeedle ? "text-cyan-300" : hasGrasper ? "text-blue-300" : "text-zinc-300"} ${jb}`}>
               {hasNeedle ? "Suturing Window" : hasGrasper ? "Retraction Assist" : "Observation Mode"}
             </p>
           </div>
@@ -122,10 +122,10 @@ export default function SideBar({
             hasNeedle
               ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-200"
               : hasGrasper
-                ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                ? "border-blue-400/20 bg-blue-400/10 text-blue-200"
                 : "border-white/[0.08] bg-white/[0.04] text-zinc-400"
           } ${jb}`}>
-            <span className={`h-2 w-2 rounded-full ${hasNeedle ? "bg-cyan-300" : hasGrasper ? "bg-emerald-300" : "bg-zinc-500"}`} />
+            <span className={`h-2 w-2 rounded-full ${hasNeedle ? "bg-cyan-300" : hasGrasper ? "bg-blue-300" : "bg-zinc-500"}`} />
             live
           </div>
         </div>
@@ -169,8 +169,8 @@ export default function SideBar({
         <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-3 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
           <div className={`text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500 ${jb}`}>Status</div>
           <div className="mt-1.5 flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${hasNeedle ? "bg-[#00E5FF] shadow-[0_0_8px_rgba(0,229,255,0.5)]" : hasGrasper ? "bg-[#00FF88] shadow-[0_0_8px_rgba(0,255,136,0.4)]" : "bg-zinc-600"}`} />
-            <span className={`text-[16px] font-medium ${hasNeedle ? "text-[#00E5FF]" : hasGrasper ? "text-[#00FF88]" : "text-zinc-300"} ${jb}`}>
+            <span className={`h-2 w-2 rounded-full ${hasNeedle ? "bg-[#88EEFF] shadow-[0_0_8px_rgba(136,238,255,0.5)]" : hasGrasper ? "bg-[#3B82F6] shadow-[0_0_8px_rgba(59,130,246,0.45)]" : "bg-zinc-600"}`} />
+            <span className={`text-[16px] font-medium ${hasNeedle ? "text-[#88EEFF]" : hasGrasper ? "text-[#3B82F6]" : "text-zinc-300"} ${jb}`}>
               {hasNeedle ? "Suturing" : hasGrasper ? "Retraction" : "Observing"}
             </span>
           </div>

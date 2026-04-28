@@ -63,6 +63,16 @@ interface CopilotState {
   secondaryCue: string;
 }
 
+type TargetIconStyle =
+  | "lock"
+  | "crosshair"
+  | "pulse"
+  | "brackets"
+  | "diamond"
+  | "rings"
+  | "pin"
+  | "scan";
+
 function timeToFrameIndex(t: number, fps: number, count: number): number {
   return Math.min(Math.max(Math.round(t * fps), 0), count - 1);
 }
@@ -261,7 +271,10 @@ export default function VideoPlayerTab({
   const [showOverlay, setShowOverlay] = useState(true);
   const [showTargetZone, setShowTargetZone] = useState(true);
   const [showDangerZone, setShowDangerZone] = useState(true);
+  const [showToolZones, setShowToolZones] = useState(false);
   const [showZoneLabels, setShowZoneLabels] = useState(true);
+  const [showFullLabels, setShowFullLabels] = useState(false);
+  const [targetIconStyle, setTargetIconStyle] = useState<TargetIconStyle>("lock");
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -330,35 +343,63 @@ export default function VideoPlayerTab({
     () => getZonePixelBounds(currentZoneMap.get("Epicardial fat on aortic"), overlaySize),
     [currentZoneMap, overlaySize]
   );
+  const grasperPixelBounds = useMemo(
+    () => getZonePixelBounds(currentZoneMap.get("Grasper"), overlaySize),
+    [currentZoneMap, overlaySize]
+  );
+  const needlePixelBounds = useMemo(
+    () => getZonePixelBounds(currentZoneMap.get("Needle holders"), overlaySize),
+    [currentZoneMap, overlaySize]
+  );
   const targetAnchor = useMemo(() => getZoneAnchor(currentZoneMap.get("Aortic root")), [currentZoneMap]);
   const avoidAnchor = useMemo(() => getZoneAnchor(currentZoneMap.get("Auricles")), [currentZoneMap]);
   const cautionAnchor = useMemo(() => getZoneAnchor(currentZoneMap.get("Epicardial fat on aortic")), [currentZoneMap]);
+  const grasperAnchor = useMemo(() => getZoneAnchor(currentZoneMap.get("Grasper")), [currentZoneMap]);
+  const needleAnchor = useMemo(() => getZoneAnchor(currentZoneMap.get("Needle holders")), [currentZoneMap]);
   const targetLabelPosition = useMemo(
     () => getPinnedLabelPlacement(targetAnchor, targetPixelBounds, overlaySize, {
       biasX: 0.2,
       biasY: -0.12,
-      labelWidth: 52,
-      labelHeight: 26,
+      labelWidth: showFullLabels ? 72 : 26,
+      labelHeight: 18,
     }),
-    [overlaySize, targetAnchor, targetPixelBounds]
+    [overlaySize, showFullLabels, targetAnchor, targetPixelBounds]
   );
   const cautionLabelPosition = useMemo(
     () => getPinnedLabelPlacement(cautionAnchor, cautionPixelBounds, overlaySize, {
       biasX: -0.08,
       biasY: 0.08,
-      labelWidth: 62,
-      labelHeight: 28,
+      labelWidth: showFullLabels ? 142 : 24,
+      labelHeight: 18,
     }),
-    [cautionAnchor, cautionPixelBounds, overlaySize]
+    [cautionAnchor, cautionPixelBounds, overlaySize, showFullLabels]
   );
   const avoidLabelPosition = useMemo(
     () => getPinnedLabelPlacement(avoidAnchor, avoidPixelBounds, overlaySize, {
       biasX: 0.18,
       biasY: 0.18,
-      labelWidth: 66,
-      labelHeight: 28,
+      labelWidth: showFullLabels ? 58 : 34,
+      labelHeight: 18,
     }),
-    [avoidAnchor, avoidPixelBounds, overlaySize]
+    [avoidAnchor, avoidPixelBounds, overlaySize, showFullLabels]
+  );
+  const grasperLabelPosition = useMemo(
+    () => getPinnedLabelPlacement(grasperAnchor, grasperPixelBounds, overlaySize, {
+      biasX: 0,
+      biasY: 0,
+      labelWidth: showFullLabels ? 56 : 28,
+      labelHeight: 18,
+    }),
+    [grasperAnchor, grasperPixelBounds, overlaySize, showFullLabels]
+  );
+  const needleLabelPosition = useMemo(
+    () => getPinnedLabelPlacement(needleAnchor, needlePixelBounds, overlaySize, {
+      biasX: 0,
+      biasY: 0,
+      labelWidth: showFullLabels ? 94 : 28,
+      labelHeight: 18,
+    }),
+    [needleAnchor, needlePixelBounds, overlaySize, showFullLabels]
   );
   const activeZoneName = hoveredZoneName ?? pinnedZoneName;
   const copilot = useMemo<CopilotState>(() => {
@@ -370,7 +411,7 @@ export default function VideoPlayerTab({
       return {
         stageKey: "suture",
         stageLabel: "Suturing Assist",
-        stageColor: "#00d4ff",
+        stageColor: "#22c55e",
         primaryCue: "Center trajectory on AR. Keep path clear of avoid zones.",
         secondaryCue: "Auricles remain visible in the working field.",
       };
@@ -389,7 +430,7 @@ export default function VideoPlayerTab({
     return {
       stageKey: "focus",
       stageLabel: "Target Focus",
-      stageColor: "#00d4ff",
+      stageColor: "#22c55e",
       primaryCue: "Working window ready. Focus the next approach on AR.",
       secondaryCue: "Advance only after the target is clearly exposed.",
     };
@@ -595,7 +636,7 @@ export default function VideoPlayerTab({
   // ── OVERLAY RENDER — MERGED ──
   //   • Border: glow + core sharp từ Code 1, ĐỔI THÀNH NÉT ĐỨT
   //   • Fill:   globalCompositeOperation = "overlay" từ Code 2 (tint mô, giữ highlight)
-  //   • Màu:    giữ bộ #00d4ff / #ffaa00 / #ff32b4 (khớp ảnh 1)
+  //   • Màu:    AR xanh lá, EF cam, AUC đỏ.
   // ═══════════════════════════════════════════════════════════════════════
   const renderOverlay = useCallback(() => {
     const v = videoRef.current;
@@ -628,6 +669,9 @@ export default function VideoPlayerTab({
       ? zones.filter((z) =>
           z.label === "Epicardial fat on aortic" || z.label === "Auricles"
         )
+      : [];
+    const toolZones = showToolZones
+      ? zones.filter((z) => z.label === "Grasper" || z.label === "Needle holders")
       : [];
 
     ctx.lineJoin = "round";
@@ -670,18 +714,29 @@ export default function VideoPlayerTab({
 
       // Màu theo role (giữ bộ từ Code 1)
       let glowColor = "rgba(255,255,255,0.8)";
-      const coreColor = "rgba(255,255,255,0.95)";
+      let coreColor = "rgba(255,255,255,0.95)";
       let fillColor = "rgba(255,255,255,0.15)";
+      let shadowBoost = 1;
 
       if (isTarget) {
-        glowColor = "rgba(0, 212, 255, 0.85)";
-        fillColor = "rgba(0, 212, 255, 0.22)"; // alpha cao hơn vì dùng overlay blend
+        glowColor = "rgba(22, 163, 74, 1)";
+        coreColor = "rgba(220, 252, 231, 0.98)";
+        fillColor = "rgba(22, 163, 74, 0.34)"; // alpha cao hơn vì dùng overlay blend
+        shadowBoost = 1.75;
       } else if (role === "caution") {
         glowColor = "rgba(255, 170, 0, 0.85)";
         fillColor = "rgba(255, 170, 0, 0.18)";
       } else if (role === "avoid") {
-        glowColor = "rgba(255, 50, 180, 0.85)";
-        fillColor = "rgba(255, 50, 180, 0.16)";
+        glowColor = "rgba(248, 45, 45, 0.98)";
+        coreColor = "rgba(254, 226, 226, 0.95)";
+        fillColor = "rgba(239, 68, 68, 0.26)";
+        shadowBoost = 1.28;
+      } else if (zone.label === "Grasper") {
+        glowColor = "rgba(59, 130, 246, 0.85)";
+        fillColor = "rgba(59, 130, 246, 0.18)";
+      } else if (zone.label === "Needle holders") {
+        glowColor = "rgba(136, 238, 255, 0.85)";
+        fillColor = "rgba(136, 238, 255, 0.18)";
       }
 
       const isActive = activeZoneName === zone.label;
@@ -707,9 +762,9 @@ export default function VideoPlayerTab({
       ctx.setLineDash(DASH);
       ctx.strokeStyle = glowColor;
       ctx.globalAlpha = mutedAlpha;
-      ctx.lineWidth = (isTarget ? 4 : 3) * scale * activeMultiplier;
+      ctx.lineWidth = (isTarget ? 5.5 : role === "avoid" ? 4.2 : 3) * scale * activeMultiplier;
       ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 10 * scale * activeMultiplier;
+      ctx.shadowBlur = 10 * scale * activeMultiplier * shadowBoost;
       ctx.stroke();
       ctx.restore();
 
@@ -719,7 +774,7 @@ export default function VideoPlayerTab({
       ctx.setLineDash(DASH);
       ctx.strokeStyle = coreColor;
       ctx.globalAlpha = mutedAlpha;
-      ctx.lineWidth = (isTarget ? 1.6 : 1.1) * scale * (isActive ? 1.25 : 1);
+      ctx.lineWidth = (isTarget ? 2.35 : role === "avoid" ? 1.45 : 1.1) * scale * (isActive ? 1.25 : 1);
       ctx.shadowBlur = 0;
       ctx.stroke();
       ctx.restore();
@@ -727,9 +782,10 @@ export default function VideoPlayerTab({
 
     // Thứ tự vẽ: background zones trước, target zone trên cùng
     backgroundZones.forEach(z => drawZone(z, false));
+    toolZones.forEach(z => drawZone(z, false));
     if (targetZone) drawZone(targetZone, true);
 
-  }, [activeZoneName, showDangerZone, showOverlay, showTargetZone, getZonesForTime, fps, framePoints, dimensions, focusMode]);
+  }, [activeZoneName, showDangerZone, showOverlay, showTargetZone, showToolZones, getZonesForTime, fps, framePoints, dimensions, focusMode]);
 
   const renderLinesOv = useCallback(() => {
     const v = videoRef.current;
@@ -859,6 +915,37 @@ export default function VideoPlayerTab({
                     {showZoneLabels ? "Hide Labels" : "Show Labels"}
                   </button>
 
+                  {showZoneLabels && (
+                    <button
+                      onClick={() => setShowFullLabels((v) => !v)}
+                      className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                        showFullLabels
+                          ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                          : "border-white/[0.08] bg-white/[0.035] text-zinc-300 hover:bg-white/[0.08] hover:text-zinc-100"
+                      }`}
+                    >
+                      {showFullLabels ? "Short Labels" : "Full Labels"}
+                    </button>
+                  )}
+
+                  {showTargetZone && (
+                    <select
+                      value={targetIconStyle}
+                      onChange={(event) => setTargetIconStyle(event.target.value as TargetIconStyle)}
+                      className="rounded-xl border border-sky-500/30 bg-[#07111d] px-3 py-1.5 text-xs font-semibold text-sky-100 outline-none transition-colors hover:border-sky-400/45 hover:bg-[#0b1b2b] hover:text-white"
+                      aria-label="Target icon style"
+                    >
+                      <option className="bg-[#07111d] text-sky-100" value="lock">Target Lock</option>
+                      <option className="bg-[#07111d] text-sky-100" value="crosshair">Crosshair</option>
+                      <option className="bg-[#07111d] text-sky-100" value="pulse">Pulse Ring</option>
+                      <option className="bg-[#07111d] text-sky-100" value="brackets">Brackets</option>
+                      <option className="bg-[#07111d] text-sky-100" value="diamond">Diamond</option>
+                      <option className="bg-[#07111d] text-sky-100" value="rings">Double Rings</option>
+                      <option className="bg-[#07111d] text-sky-100" value="pin">Pinpoint</option>
+                      <option className="bg-[#07111d] text-sky-100" value="scan">Scan Box</option>
+                    </select>
+                  )}
+
                   <button
                     onClick={() => setFocusMode((value) => !value)}
                     className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
@@ -890,6 +977,17 @@ export default function VideoPlayerTab({
                     }`}
                   >
                     {showDangerZone ? "Hide Danger Zone" : "Show Danger Zone"}
+                  </button>
+
+                  <button
+                    onClick={() => setShowToolZones((v) => !v)}
+                    className={`rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                      showToolZones
+                        ? "border-sky-500 bg-sky-500/20 text-sky-300"
+                        : "border-white/[0.08] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08] hover:text-zinc-100"
+                    }`}
+                  >
+                    {showToolZones ? "Hide Tools" : "Show Tools"}
                   </button>
                 </>
               )}
@@ -1014,8 +1112,8 @@ export default function VideoPlayerTab({
                         transform: "translate(-50%, -50%)",
                       }}
                     >
-                      <div className="tech-label !border-[#00d4ff]/80 !bg-black/85 !px-2 !py-0.5 !text-sm !font-bold !text-[#00d4ff] relative z-10 shadow-[0_0_15px_rgba(0,212,255,0.6)]">
-                        AR
+                      <div className="rounded-[3px] bg-black/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
+                        {showFullLabels ? "Aortic root" : "AR"}
                       </div>
                     </div>
                   )}
@@ -1029,9 +1127,8 @@ export default function VideoPlayerTab({
                         transform: "translate(-50%, -50%)",
                       }}
                     >
-                      <div className="tech-label !border-[#ffaa00]/80 !text-[#ffaa00] !bg-black/85 !px-2 !py-0.5 !text-sm !font-bold gap-1 shadow-[0_0_12px_rgba(255,170,0,0.5)]">
-                         <svg className="h-3.5 w-3.5 text-[#ffaa00]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77-1.333.192 3 1.732 3z" /></svg>
-                         EF
+                      <div className="rounded-[3px] bg-black/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
+                        {showFullLabels ? "Epicardial fat on aortic" : "EF"}
                       </div>
                     </div>
                   )}
@@ -1045,9 +1142,38 @@ export default function VideoPlayerTab({
                          transform: "translate(-50%, -50%)",
                        }}
                      >
-                      <div className="tech-label tech-label-danger !border-[#ff32b4]/80 !bg-black/85 !px-2 !py-0.5 !text-sm !font-bold !text-[#ff32b4] gap-1 shadow-[0_0_12px_rgba(255,50,180,0.4)]">
-                         <svg className="h-3.5 w-3.5 text-[#ff32b4]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                         AUC
+                      <div className="rounded-[3px] bg-black/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
+                        {showFullLabels ? "Auricles" : "AUC"}
+                      </div>
+                    </div>
+                  )}
+
+                  {showZoneLabels && showToolZones && grasperLabelPosition && (
+                    <div
+                      className="absolute"
+                      style={{
+                        left: grasperLabelPosition.labelX,
+                        top: grasperLabelPosition.labelY,
+                        transform: "translate(-50%, -50%)",
+                      }}
+                    >
+                      <div className="rounded-[3px] bg-black/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
+                        {showFullLabels ? "Grasper" : "GR"}
+                      </div>
+                    </div>
+                  )}
+
+                  {showZoneLabels && showToolZones && needleLabelPosition && (
+                    <div
+                      className="absolute"
+                      style={{
+                        left: needleLabelPosition.labelX,
+                        top: needleLabelPosition.labelY,
+                        transform: "translate(-50%, -50%)",
+                      }}
+                    >
+                      <div className="rounded-[3px] bg-black/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
+                        {showFullLabels ? "Needle holders" : "NH"}
                       </div>
                     </div>
                   )}
@@ -1058,16 +1184,118 @@ export default function VideoPlayerTab({
                   <svg className="pointer-events-none absolute inset-0 z-[12] h-full w-full" viewBox={`0 0 ${dimensions.width} ${dimensions.height}`} preserveAspectRatio="xMidYMid meet">
                     {targetBounds && (
                       <g transform={`translate(${targetBounds.cx * dimensions.width}, ${targetBounds.cy * dimensions.height})`}>
-                        <circle r="16" fill="none" stroke="#00d4ff" strokeWidth="1.5" opacity="0.9" style={{ filter: "drop-shadow(0 0 6px #00d4ff)" }} />
-                        <g>
-                          <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="8s" repeatCount="indefinite" />
-                          <circle r="26" fill="none" stroke="#00d4ff" strokeWidth="1.5" strokeDasharray="10 15" opacity="0.8" style={{ filter: "drop-shadow(0 0 6px #00d4ff)" }} />
-                          <line x1="-32" y1="0" x2="-22" y2="0" stroke="#00d4ff" strokeWidth="2" style={{ filter: "drop-shadow(0 0 6px #00d4ff)" }} />
-                          <line x1="22" y1="0" x2="32" y2="0" stroke="#00d4ff" strokeWidth="2" style={{ filter: "drop-shadow(0 0 6px #00d4ff)" }} />
-                          <line x1="0" y1="-32" x2="0" y2="-22" stroke="#00d4ff" strokeWidth="2" style={{ filter: "drop-shadow(0 0 6px #00d4ff)" }} />
-                          <line x1="0" y1="22" x2="0" y2="32" stroke="#00d4ff" strokeWidth="2" style={{ filter: "drop-shadow(0 0 6px #00d4ff)" }} />
-                        </g>
-                        <circle r="2" fill="#00d4ff" style={{ filter: "drop-shadow(0 0 4px #00d4ff)" }} />
+                        {targetIconStyle === "lock" && (
+                          <>
+                            <circle r="19" fill="rgba(20,83,45,0.22)" stroke="#14532d" strokeWidth="2" opacity="0.98" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }} />
+                            <circle r="29" fill="none" stroke="#166534" strokeWidth="2" opacity="0.78">
+                              <animate attributeName="r" values="24;35;24" dur="2.4s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.82;0.22;0.82" dur="2.4s" repeatCount="indefinite" />
+                            </circle>
+                            <g>
+                              <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="8s" repeatCount="indefinite" />
+                              <path d="M -30 -12 L -30 -30 L -12 -30 M 12 -30 L 30 -30 L 30 -12 M 30 12 L 30 30 L 12 30 M -12 30 L -30 30 L -30 12" fill="none" stroke="#14532d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.98" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }} />
+                              <circle r="23" fill="none" stroke="#22c55e" strokeWidth="1.6" strokeDasharray="5 8" opacity="0.9" />
+                              <line x1="-35" y1="0" x2="-21" y2="0" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
+                              <line x1="21" y1="0" x2="35" y2="0" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
+                              <line x1="0" y1="-35" x2="0" y2="-21" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
+                              <line x1="0" y1="21" x2="0" y2="35" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
+                            </g>
+                          </>
+                        )}
+                        {targetIconStyle === "crosshair" && (
+                          <>
+                            <circle r="22" fill="rgba(20,83,45,0.18)" stroke="#14532d" strokeWidth="2.4" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }}>
+                              <animate attributeName="r" values="20;24;20" dur="2.2s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.95;0.62;0.95" dur="2.2s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="12" fill="none" stroke="#dcfce7" strokeWidth="1.6" opacity="0.95">
+                              <animate attributeName="r" values="10;13;10" dur="2.2s" repeatCount="indefinite" />
+                            </circle>
+                            <line x1="-36" y1="0" x2="-16" y2="0" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
+                            <line x1="16" y1="0" x2="36" y2="0" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
+                            <line x1="0" y1="-36" x2="0" y2="-16" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
+                            <line x1="0" y1="16" x2="0" y2="36" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
+                          </>
+                        )}
+                        {targetIconStyle === "pulse" && (
+                          <>
+                            <circle r="13" fill="rgba(20,83,45,0.24)" stroke="#dcfce7" strokeWidth="1.8">
+                              <animate attributeName="r" values="11;14;11" dur="1.8s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="25" fill="none" stroke="#14532d" strokeWidth="2.8" opacity="0.86" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }}>
+                              <animate attributeName="r" values="18;38;18" dur="1.8s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.9;0.12;0.9" dur="1.8s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="34" fill="none" stroke="#22c55e" strokeWidth="1.4" strokeDasharray="4 7" opacity="0.72">
+                              <animate attributeName="stroke-dashoffset" values="0;22" dur="2.4s" repeatCount="indefinite" />
+                            </circle>
+                          </>
+                        )}
+                        {targetIconStyle === "brackets" && (
+                          <>
+                            <path d="M -34 -10 L -34 -34 L -10 -34 M 10 -34 L 34 -34 L 34 -10 M 34 10 L 34 34 L 10 34 M -10 34 L -34 34 L -34 10" fill="none" stroke="#14532d" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.98" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
+                              <animate attributeName="opacity" values="0.98;0.58;0.98" dur="2.1s" repeatCount="indefinite" />
+                            </path>
+                            <path d="M -24 0 L -11 0 M 11 0 L 24 0 M 0 -24 L 0 -11 M 0 11 L 0 24" fill="none" stroke="#dcfce7" strokeWidth="2.2" strokeLinecap="round" />
+                            <circle r="15" fill="rgba(20,83,45,0.16)" stroke="#22c55e" strokeWidth="1.8" strokeDasharray="3 6">
+                              <animate attributeName="r" values="13;18;13" dur="2.1s" repeatCount="indefinite" />
+                              <animate attributeName="stroke-dashoffset" values="0;18" dur="2.1s" repeatCount="indefinite" />
+                            </circle>
+                          </>
+                        )}
+                        {targetIconStyle === "diamond" && (
+                          <>
+                            <path d="M 0 -34 L 34 0 L 0 34 L -34 0 Z" fill="rgba(20,83,45,0.16)" stroke="#14532d" strokeWidth="3.2" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
+                              <animate attributeName="opacity" values="0.95;0.58;0.95" dur="2.6s" repeatCount="indefinite" />
+                            </path>
+                            <path d="M 0 -22 L 22 0 L 0 22 L -22 0 Z" fill="none" stroke="#dcfce7" strokeWidth="1.8" strokeDasharray="5 7" opacity="0.9">
+                              <animate attributeName="stroke-dashoffset" values="0;24" dur="2.6s" repeatCount="indefinite" />
+                            </path>
+                            <line x1="-32" y1="0" x2="-17" y2="0" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" />
+                            <line x1="17" y1="0" x2="32" y2="0" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" />
+                          </>
+                        )}
+                        {targetIconStyle === "rings" && (
+                          <>
+                            <circle r="31" fill="rgba(20,83,45,0.12)" stroke="#14532d" strokeWidth="3" opacity="0.95" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
+                              <animate attributeName="r" values="29;33;29" dur="2.8s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="21" fill="none" stroke="#dcfce7" strokeWidth="1.6" strokeDasharray="6 8" opacity="0.86">
+                              <animate attributeName="stroke-dashoffset" values="0;28" dur="2.8s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="12" fill="none" stroke="#22c55e" strokeWidth="2" opacity="0.9">
+                              <animate attributeName="r" values="10;13;10" dur="2.8s" repeatCount="indefinite" />
+                            </circle>
+                            <path d="M -38 0 L -28 0 M 28 0 L 38 0 M 0 -38 L 0 -28 M 0 28 L 0 38" fill="none" stroke="#14532d" strokeWidth="2.6" strokeLinecap="round" />
+                          </>
+                        )}
+                        {targetIconStyle === "pin" && (
+                          <>
+                            <circle r="26" cy="-14" fill="none" stroke="#22c55e" strokeWidth="1.6" opacity="0.5">
+                              <animate attributeName="r" values="18;32;18" dur="2s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.55;0.1;0.55" dur="2s" repeatCount="indefinite" />
+                            </circle>
+                            <path d="M 0 -38 C 13 -38 23 -28 23 -16 C 23 1 0 34 0 34 C 0 34 -23 1 -23 -16 C -23 -28 -13 -38 0 -38 Z" fill="rgba(20,83,45,0.18)" stroke="#14532d" strokeWidth="3" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
+                              <animate attributeName="opacity" values="0.98;0.72;0.98" dur="2s" repeatCount="indefinite" />
+                            </path>
+                            <circle r="12" cy="-14" fill="rgba(220,252,231,0.18)" stroke="#dcfce7" strokeWidth="1.8" />
+                            <path d="M -17 16 Q 0 24 17 16" fill="none" stroke="#22c55e" strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
+                          </>
+                        )}
+                        {targetIconStyle === "scan" && (
+                          <>
+                            <rect x="-32" y="-32" width="64" height="64" rx="7" fill="rgba(20,83,45,0.12)" stroke="#14532d" strokeWidth="3" strokeDasharray="9 8" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
+                              <animate attributeName="stroke-dashoffset" values="0;34" dur="2.1s" repeatCount="indefinite" />
+                            </rect>
+                            <line x1="-25" y1="-12" x2="25" y2="-12" stroke="#dcfce7" strokeWidth="1.6" strokeLinecap="round" opacity="0.85">
+                              <animate attributeName="y1" values="-18;18;-18" dur="2.1s" repeatCount="indefinite" />
+                              <animate attributeName="y2" values="-18;18;-18" dur="2.1s" repeatCount="indefinite" />
+                            </line>
+                            <path d="M -26 0 L -12 0 M 12 0 L 26 0 M 0 -26 L 0 -12 M 0 12 L 0 26" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" />
+                          </>
+                        )}
+                        <circle r="5.2" fill="#dcfce7" stroke="#14532d" strokeWidth="2.2" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }} />
+                        <circle r="1.8" fill="#052e16" />
                       </g>
                     )}
                   </svg>
