@@ -25,7 +25,7 @@ export default function ImageGallery({ initialDir = "" }: ImageGalleryProps) {
 
   // Segmentation overlay state
   const [labelsMap, setLabelsMap] = useState<Record<string, SegmentationTag[]>>({});
-  const [showOverlay, setShowOverlay] = useState(false);
+  const [showOverlay] = useState(true);
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
   const [overlayDecoding, setOverlayDecoding] = useState(false);
   const overlayCache = useRef<Map<string, string>>(new Map());
@@ -314,18 +314,6 @@ export default function ImageGallery({ initialDir = "" }: ImageGalleryProps) {
         </button>
         {selected && (
           <>
-            {labelsMap[selected.name] && (
-              <button
-                onClick={() => setShowOverlay((v) => !v)}
-                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                  showOverlay
-                    ? "border-blue-500 bg-blue-500/20 text-blue-300"
-                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
-                }`}
-              >
-                {showOverlay ? "Hide Labels" : "Show Labels"}
-              </button>
-            )}
             {boundaryMap[selected.name] && (
               <button
                 onClick={() => setShowBoundary((v) => !v)}

@@ -45,6 +45,18 @@ export const boundaryLine = {
 export const boundaryFill = {
   /** Semi-transparent fill opacity for the polygon interior (0–1). */
   opacity: 0.2,
+
+  /**
+   * Dedicated fill opacity for danger zones (0–1).
+   * Set higher than `opacity` so danger boundaries are clearly visible from a distance.
+   */
+  dangerFillOpacity: 0.45,
+
+  /**
+   * Dedicated fill opacity for other-zone boundaries (0–1).
+   * e.g. Aortic root, Auricles, Epicardial adipose tissue.
+   */
+  otherFillOpacity: 0.30,
 };
 
 // ── Label badge (shared by boundary and segmentation overlays) ────────────────
@@ -156,13 +168,13 @@ export const sutureHint = {
   innerCircleRadius: 24,
 
   /** Color of the start point. */
-  startColor: "#22c55e",    // Green
+  startColor: "#22c55e",    // Green — safe zone color
 
   /** Color of the middle point. */
-  middleColor: "#eab308",   // Yellow
+  middleColor: "#22c55e",    // Green — safe zone color
 
   /** Color of the end point. */
-  endColor: "#ef4444",      // Red
+  endColor: "#22c55e",      // Green — safe zone color
 
   /** Opacity of the outer pulsing ring (0–1). */
   outerRingOpacity: 0.7,

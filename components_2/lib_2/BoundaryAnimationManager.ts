@@ -3,8 +3,13 @@ import { SafeZone, DangerZone, OtherZone, ToolZone, Zone } from "./types";
 // ── Zone classification ───────────────────────────────────────────────────────
 
 const DANGER_LABELS = new Set(["Phrenic nerve"]);
-const SAFE_LABELS = new Set(["Pericardium", "Aortic root", "Auricles"]);
-const OTHER_LABELS = new Set(["Epicardial adipose tissue", "Epicardial fat on aortic"]);
+const SAFE_LABELS = new Set(["Pericardium boundary"]);
+const OTHER_LABELS = new Set([
+  "Aortic root",
+  "Auricles",
+  "Epicardial adipose tissue",
+  "Epicardial fat on aortic",
+]);
 const TOOL_LABELS = new Set(["Grasper", "Needle holder"]);
 
 export type ZoneCategory = "danger" | "safe" | "other" | "tool" | "unknown";
