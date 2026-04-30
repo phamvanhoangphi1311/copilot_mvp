@@ -183,7 +183,7 @@ export const sutureHint = {
   badgeBackgroundOpacity: 0.85,
 
   /** Font size of the label badge text (px). */
-  badgeFontSize: 16,
+  badgeFontSize: 14,
 
   /** Whether to show the connecting line between suture points. */
   showConnectLine: true,

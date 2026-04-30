@@ -25,7 +25,7 @@ export default function ImageGallery({ initialDir = "" }: ImageGalleryProps) {
 
   // Segmentation overlay state
   const [labelsMap, setLabelsMap] = useState<Record<string, SegmentationTag[]>>({});
-  const [showOverlay] = useState(true);
+  const [showOverlay, setShowOverlay] = useState(true);
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
   const [overlayDecoding, setOverlayDecoding] = useState(false);
   const overlayCache = useRef<Map<string, string>>(new Map());

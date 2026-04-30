@@ -6,7 +6,6 @@
  *  Alpha channel (every 4th value) indicates mask foreground.
  */
 import {
-  boundaryLine,
   boundaryFill,
   overlayLabel,
   segmentationMask,
@@ -152,6 +151,70 @@ const EXTRA_COLORS: LabelColor[] = [
 
 export function getLabelColor(label: string, index: number): LabelColor {
   return KNOWN_COLORS[label] ?? EXTRA_COLORS[index % EXTRA_COLORS.length];
+}
+
+const CANVAS_LABEL_FONT_SIZE = 14;
+
+const FULL_LABELS: Record<string, string> = {};
+
+const SHORT_LABELS: Record<string, string> = {
+  "Phrenic nerve": "PN",
+  "Aortic root": "AR",
+  Auricles: "AUC",
+  "Epicardial adipose tissue": "EAT",
+  "Epicardial fat on aortic": "EF",
+  "Pericardium boundary": "PB",
+  Grasper: "GR",
+  "Needle holder": "NH",
+  "Needle holders": "NH",
+  "Pericardial stay sutures": "PSS",
+  Band: "BD",
+  "Incision line": "IL",
+  Centerline: "CL",
+};
+
+function getDisplayLabel(label: string, abbreviate: boolean): string {
+  if (abbreviate) {
+    return SHORT_LABELS[label] ?? label
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("")
+      .slice(0, 4);
+  }
+  return FULL_LABELS[label] ?? label;
+}
+
+function buildSmoothedPolygonPath(
+  ctx: CanvasRenderingContext2D,
+  polygons: { x: number; y: number }[][],
+  width: number,
+  height: number,
+): void {
+  ctx.beginPath();
+  for (const poly of polygons) {
+    if (poly.length < 2) continue;
+    if (poly.length > 2) {
+      const smoothed = poly.map((curr, index) => {
+        const prev = poly[(index - 1 + poly.length) % poly.length];
+        const next = poly[(index + 1) % poly.length];
+        return {
+          x: (curr.x * 0.75 + prev.x * 0.125 + next.x * 0.125) * (width - 1),
+          y: (curr.y * 0.75 + prev.y * 0.125 + next.y * 0.125) * (height - 1),
+        };
+      });
+      ctx.moveTo(smoothed[0].x, smoothed[0].y);
+      for (let i = 1; i < smoothed.length; i++) {
+        ctx.lineTo(smoothed[i].x, smoothed[i].y);
+      }
+    } else {
+      ctx.moveTo(poly[0].x * (width - 1), poly[0].y * (height - 1));
+      for (let i = 1; i < poly.length; i++) {
+        ctx.lineTo(poly[i].x * (width - 1), poly[i].y * (height - 1));
+      }
+    }
+    ctx.closePath();
+  }
 }
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -339,11 +402,14 @@ export function renderBoundaryOverlay(
   animManager?: BoundaryAnimationManager,
   showSafeZones = false,
   showToolLabels = false,
+  abbreviateLabels = true,
 ): void {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, width, height);
+  const renderScale = width / 1920;
+  const dash: [number, number] = [6 * renderScale, 8 * renderScale];
 
   const visibleZones = showSafeZones
     ? zones
@@ -358,15 +424,8 @@ export function renderBoundaryOverlay(
     }
   }
 
-  const lineWidth =
-    boundaryLine.lineWidth > 0
-      ? boundaryLine.lineWidth
-      : Math.max(boundaryLine.minWidth, Math.round(width / boundaryLine.autoScaleDivisor));
-
-  const lineDash =
-    boundaryLine.style === "dashed"
-      ? [boundaryLine.dashLength, boundaryLine.gapLength]
-      : [];
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
 
   for (const zone of visibleZones) {
     if (zone.label === "Foreground") continue;
@@ -375,29 +434,47 @@ export function renderBoundaryOverlay(
     const polygons = normalizePolygons(zone.points);
     const color = getBoundaryColor(zone.label);
     const zoneAlpha = animManager?.getHint(zone.label)?.opacity ?? 1;
+    const category = classifyZone(zone.label);
+    const isTarget = zone.label === "Aortic root";
+    const outerWidth =
+      (isTarget ? 5.5 : category === "danger" ? 4.2 : 3) * renderScale;
+    const coreWidth =
+      (isTarget ? 2.35 : category === "danger" ? 1.45 : 1.1) * renderScale;
+    const fillOpacity =
+      category === "danger" ? Math.min(0.3, boundaryFill.dangerFillOpacity)
+      : category === "other" ? Math.min(0.22, boundaryFill.otherFillOpacity)
+      : category === "tool" ? 0.18
+      : Math.min(0.22, boundaryFill.opacity);
 
     for (const poly of polygons) {
       if (poly.length < 2) continue;
 
-      ctx.beginPath();
-      ctx.moveTo(poly[0].x * (width - 1), poly[0].y * (height - 1));
-      for (let i = 1; i < poly.length; i++) {
-        ctx.lineTo(poly[i].x * (width - 1), poly[i].y * (height - 1));
-      }
-      ctx.closePath();
-
-      const category = classifyZone(zone.label);
-      const fillOpacity =
-        category === "danger" ? boundaryFill.dangerFillOpacity
-        : category === "other"  ? boundaryFill.otherFillOpacity
-        : boundaryFill.opacity;
-      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${fillOpacity * zoneAlpha})`;
+      buildSmoothedPolygonPath(ctx, [poly], width, height);
+      ctx.save();
+      ctx.globalCompositeOperation = "overlay";
+      ctx.globalAlpha = zoneAlpha;
+      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${fillOpacity})`;
       ctx.fill();
+      ctx.restore();
 
-      ctx.setLineDash(lineDash);
-      ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${boundaryLine.opacity * zoneAlpha})`;
-      ctx.lineWidth = lineWidth;
+      buildSmoothedPolygonPath(ctx, [poly], width, height);
+      ctx.save();
+      ctx.setLineDash(dash);
+      ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${0.95 * zoneAlpha})`;
+      ctx.lineWidth = outerWidth;
+      ctx.shadowColor = `rgba(${color.r},${color.g},${color.b},${0.95 * zoneAlpha})`;
+      ctx.shadowBlur = 10 * renderScale * (isTarget ? 1.75 : category === "danger" ? 1.28 : 1);
       ctx.stroke();
+      ctx.restore();
+
+      buildSmoothedPolygonPath(ctx, [poly], width, height);
+      ctx.save();
+      ctx.setLineDash(dash);
+      ctx.strokeStyle = `rgba(255,255,255,${category === "danger" ? 0.9 : 0.78})`;
+      ctx.lineWidth = coreWidth;
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+      ctx.restore();
       ctx.setLineDash([]);
     }
   }
@@ -406,8 +483,8 @@ export function renderBoundaryOverlay(
   const fontSize =
     overlayLabel.fontSize > 0
       ? overlayLabel.fontSize
-      : Math.max(overlayLabel.minFontSize, Math.round(width / overlayLabel.autoScaleDivisor));
-  ctx.font = `${fontSize}px system-ui, sans-serif`;
+      : CANVAS_LABEL_FONT_SIZE;
+  ctx.font = `bold ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -418,8 +495,9 @@ export function renderBoundaryOverlay(
     const polygons = normalizePolygons(zone.points);
     const hint = animManager?.getHint(zone.label);
     const labelAlpha = hint?.labelOpacity ?? 1;
-    const scale = hint?.labelScale ?? 1;
+    const scale = 1;
     const offY = hint?.labelOffsetY ?? 0;
+    const displayLabel = getDisplayLabel(zone.label, abbreviateLabels);
     let cx = 0, cy = 0, total = 0;
     for (const poly of polygons) {
       for (const p of poly) { cx += p.x; cy += p.y; total++; }
@@ -439,28 +517,17 @@ export function renderBoundaryOverlay(
     ctx.translate(smoothed.x - width * 0.015, smoothed.y + height * 0.04);
     ctx.scale(scale, scale);
 
-    const m = ctx.measureText(zone.label);
+    const m = ctx.measureText(displayLabel);
     const bw = m.width + overlayLabel.paddingX * 2;
     const bh = fontSize + overlayLabel.paddingY * 2;
 
-    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity * labelAlpha})`;
+    ctx.fillStyle = `rgba(0,0,0,${0.9 * labelAlpha})`;
     ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 3);
     ctx.fill();
 
-    // Dashed colored border
-    const bdrgb = getBoundaryColor(zone.label);
-    ctx.strokeStyle = `rgba(${bdrgb.r},${bdrgb.g},${bdrgb.b},${0.8 * labelAlpha})`;
-    ctx.lineWidth = overlayLabel.borderWidth;
-    ctx.setLineDash(overlayLabel.borderDashed ? overlayLabel.borderDash : []);
-    ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // White label text (respect label alpha)
     ctx.fillStyle = `rgba(255,255,255,${labelAlpha})`;
-    ctx.fillText(zone.label, 0, 0);
+    ctx.fillText(displayLabel, 0, 0);
 
     // Warning icon — shown only while the boundary is flashing, blinks with it
     // Matches the SVG triangle in SegmentationOverlay: points="0,-8 7,5 -7,5"
@@ -503,7 +570,7 @@ export function renderBoundaryOverlay(
       ctx.restore();
 
       // Restore text settings for subsequent zones
-      ctx.font = `${fontSize}px system-ui, sans-serif`;
+      ctx.font = `bold ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
     }
@@ -524,6 +591,7 @@ export function renderLinesOverlay(
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
   animManager?: BoundaryAnimationManager,
+  abbreviateLabels = true,
 ): void {
   canvas.width = width;
   canvas.height = height;
@@ -540,16 +608,14 @@ export function renderLinesOverlay(
     annotationLine.lineWidth > 0
       ? annotationLine.lineWidth
       : Math.max(annotationLine.minWidth, Math.round(width / annotationLine.autoScaleDivisor));
-  const fontSize = Math.max(
-    overlayLabel.minFontSize,
-    Math.round(width / overlayLabel.autoScaleDivisor),
-  );
+  const fontSize = CANVAS_LABEL_FONT_SIZE;
 
   ctx.lineJoin = "round";
+  ctx.lineCap = "round";
 
   const lineDash =
     annotationLine.style === "dashed"
-      ? [annotationLine.dashLength, annotationLine.gapLength]
+      ? [6 * (width / 1920), 8 * (width / 1920)]
       : [];
 
   for (const line of lines) {
@@ -582,13 +648,16 @@ export function renderLinesOverlay(
 
     ctx.setLineDash(lineDash);
     ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${annotationLine.opacity})`;
-    ctx.lineWidth = lineWidth;
+    ctx.lineWidth = Math.max(2.35 * (width / 1920), lineWidth * 0.55);
+    ctx.shadowColor = `rgba(${color.r},${color.g},${color.b},0.95)`;
+    ctx.shadowBlur = 10 * (width / 1920);
     ctx.beginPath();
     ctx.moveTo(line.points[0].x * (width - 1), line.points[0].y * (height - 1));
     for (let i = 1; i < line.points.length; i++) {
       ctx.lineTo(line.points[i].x * (width - 1), line.points[i].y * (height - 1));
     }
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.setLineDash([]);
 
     // Label badge at midpoint — styled like zone labels
@@ -601,31 +670,24 @@ export function renderLinesOverlay(
       : { x: rawMx, y: rawMy };
     const mx = smoothed.x;
     const my = smoothed.y;
-    ctx.font = `${fontSize}px system-ui, sans-serif`;
+    const displayLabel = getDisplayLabel(line.label, abbreviateLabels);
+    ctx.font = `bold ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const m = ctx.measureText(line.label);
+    const m = ctx.measureText(displayLabel);
     const bw = m.width + overlayLabel.paddingX * 2;
     const bh = fontSize + overlayLabel.paddingY * 2;
 
     ctx.save();
     ctx.translate(mx, my);
 
-    ctx.fillStyle = `rgba(0,0,0,${overlayLabel.backgroundOpacity})`;
+    ctx.fillStyle = `rgba(0,0,0,0.9)`;
     ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 3);
     ctx.fill();
 
-    ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.8)`;
-    ctx.lineWidth = overlayLabel.borderWidth;
-    ctx.setLineDash(overlayLabel.borderDashed ? overlayLabel.borderDash : []);
-    ctx.beginPath();
-    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, overlayLabel.borderRadius);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
     ctx.fillStyle = `rgba(255,255,255,1)`;
-    ctx.fillText(line.label, 0, 0);
+    ctx.fillText(displayLabel, 0, 0);
 
     ctx.restore();
   }

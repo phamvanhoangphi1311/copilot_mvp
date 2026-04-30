@@ -209,7 +209,7 @@ export function renderBoundaryOverlay(
     const polygons = normalizePolygons(zone.points);
     const hint = animManager?.getHint(zone.label);
     const labelAlpha = hint?.labelOpacity ?? 1;
-    const scale = hint?.labelScale ?? 1;
+    const scale = 1;
     const offY = hint?.labelOffsetY ?? 0;
     let cx = 0, cy = 0, total = 0;
     for (const poly of polygons) {

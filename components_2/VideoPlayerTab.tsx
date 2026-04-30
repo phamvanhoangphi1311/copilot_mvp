@@ -47,7 +47,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState<string>("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [useFsApi, setUseFsApi] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentZoneNames, setCurrentZoneNames] = useState<Set<string>>(new Set());
@@ -64,6 +63,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
   const [showSutureHints] = useState(true);
   const lastSutureFrameIndexRef = useRef<number>(-1);
   const [showLines, setShowLines] = useState(true);
+  const [showFullLabels, setShowFullLabels] = useState(true);
   const [showToolbars, setShowToolbars] = useState(true);
   const [isMouseOverVideo, setIsMouseOverVideo] = useState(false);
 
@@ -133,7 +133,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       setVideoSrc(
         `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(videoFile)}`
       );
-      setUseFsApi(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
       setVideoSrc(null);
@@ -187,7 +186,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       objectUrlRef.current = url;
       setVideoSrc(url);
       setDirPath(dirHandle.name);
-      setUseFsApi(true);
 
       // Load RLE labels (optional)
       if (rleLabelsHandle) {
@@ -285,8 +283,17 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
     const visibleLabels = new Set(zones.map((z) => z.label));
     animManagerRef.current.update(visibleLabels, video.currentTime);
 
-    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current, showSafeZones, showToolLabels);
-  }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels, showSafeZones, showToolLabels]);
+    renderBoundaryOverlay(
+      canvas,
+      zones,
+      dimensions.width || 1920,
+      dimensions.height || 1080,
+      animManagerRef.current,
+      showSafeZones,
+      showToolLabels,
+      !showFullLabels
+    );
+  }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels, showSafeZones, showToolLabels, showFullLabels]);
 
   // Render line annotations overlay
   const renderLinesOverlayCallback = useCallback(() => {
@@ -324,9 +331,14 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       entry.lines,
       dimensions.width || 1920,
       dimensions.height || 1080,
-      linesAnimManagerRef.current
+      linesAnimManagerRef.current,
+      !showFullLabels
     );
-  }, [showLines, frameLabels, fps, dimensions, videoSrc]);
+  }, [showLines, frameLabels, fps, dimensions, videoSrc, showFullLabels]);
+
+  useEffect(() => {
+    lastLinesFrameIndexRef.current = -1;
+  }, [showFullLabels]);
 
   // Render suture hint overlay on the suture canvas
   const renderSutureOverlay = useCallback(() => {
@@ -443,25 +455,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
           Video Player
         </span>
 
-        {!useFsApi && (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <input
-              type="text"
-              value={dirPath}
-              onChange={(e) => setDirPath(e.target.value)}
-              placeholder="Directory path (e.g. D:\Projects\Dataset_new)"
-              className="flex-1 min-w-0 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
-            />
-            <button
-              onClick={loadFromServer}
-              disabled={loading || !dirPath.trim()}
-              className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors whitespace-nowrap disabled:opacity-50"
-            >
-              {loading ? "Loading…" : "Load"}
-            </button>
-          </div>
-        )}
-
         <button
           onClick={loadFromPicker}
           disabled={loading}
@@ -496,7 +489,20 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
               </button>
             )}
 
-                {frameLabels.some((f) => f.zones.some((z) => z.label === "Grasper" || z.label === "Needle holder")) && (
+                {showOverlay && (
+                  <button
+                    onClick={() => setShowFullLabels((v) => !v)}
+                    className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      showFullLabels
+                        ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                        : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                    }`}
+                  >
+                    {showFullLabels ? "Short Labels" : "Full Labels"}
+                  </button>
+                )}
+
+                {frameLabels.some((f) => f.zones.some((z) => z.label === "Grasper" || z.label === "Needle holder" || z.label === "Needle holders")) && (
                   <button
                     onClick={() => setShowToolLabels((v) => !v)}
                     className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
@@ -505,7 +511,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
                         : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
                     }`}
                   >
-                    {showToolLabels ? "Hide Tool Labels" : "Show Tool Labels"}
+                    {showToolLabels ? "Hide Tools" : "Show Tools"}
                   </button>
                 )}
 
