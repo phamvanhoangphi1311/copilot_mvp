@@ -4,6 +4,7 @@ import {
   overlayLabel,
   annotationLine,
   IGNORED_LABELS,
+  TOOL_LABELS,
 } from "./overlayConfig";
 import { BoundaryAnimationManager } from "./BoundaryAnimationManager";
 import { classifyZone } from "./ZoneFactory";
@@ -63,6 +64,65 @@ function getBoundaryColor(label: string): MaskColor {
   return CLASSIFIED_COLORS[classifyZone(label)];
 }
 
+const ABBREVIATED_LABELS: Record<string, string> = {
+  "Phrenic nerve": "PN",
+  "Aortic root": "AR",
+  "Auricles": "RA",
+  "Right atrium": "RA",
+  "Epicardial adipose tissue": "EAT",
+  "Epicardial fat on aortic": "EF",
+  "Incision line": "IL",
+  "Centerline": "CL",
+  "Pericardium": "PC",
+  "Grasper": "GR",
+  "Needle holders": "NH",
+  "MV anterior annulus": "MAA",
+  "MV posterior annulus": "MPA",
+  "Anterior MV (A1)": "A1",
+  "Anterior MV (A2)": "A2",
+};
+
+function getBoundaryDisplayLabel(label: string, abbreviate: boolean): string {
+  if (!abbreviate) return label;
+  if (ABBREVIATED_LABELS[label]) return ABBREVIATED_LABELS[label];
+  const initials = label
+    .replace(/[()]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+  return initials.slice(0, 4) || label;
+}
+
+function pathSmoothedPolygon(
+  ctx: CanvasRenderingContext2D,
+  poly: { x: number; y: number }[],
+  width: number,
+  height: number,
+): void {
+  ctx.beginPath();
+  if (poly.length > 2) {
+    const smoothed = poly.map((curr, i) => {
+      const prev = poly[(i - 1 + poly.length) % poly.length];
+      const next = poly[(i + 1) % poly.length];
+      return {
+        x: (curr.x * 0.75 + prev.x * 0.125 + next.x * 0.125) * (width - 1),
+        y: (curr.y * 0.75 + prev.y * 0.125 + next.y * 0.125) * (height - 1),
+      };
+    });
+    ctx.moveTo(smoothed[0].x, smoothed[0].y);
+    for (let i = 1; i < smoothed.length; i++) {
+      ctx.lineTo(smoothed[i].x, smoothed[i].y);
+    }
+  } else {
+    ctx.moveTo(poly[0].x * (width - 1), poly[0].y * (height - 1));
+    for (let i = 1; i < poly.length; i++) {
+      ctx.lineTo(poly[i].x * (width - 1), poly[i].y * (height - 1));
+    }
+  }
+  ctx.closePath();
+}
+
 export function renderBoundaryOverlay(
   canvas: HTMLCanvasElement,
   zones: BoundaryZone[],
@@ -70,10 +130,18 @@ export function renderBoundaryOverlay(
   height = MASK_HEIGHT,
   animManager?: BoundaryAnimationManager,
   showSafeZones = false,
+  showToolZones = false,
+  abbreviateLabels = false,
 ): void {
   const ctx = setupCanvas(canvas, width, height);
 
-  const visibleZones = (showSafeZones ? zones : zones.filter((z) => classifyZone(z.label) !== "safe"))
+  const visibleZones = zones
+    .filter((z) => {
+      const role = classifyZone(z.label);
+      if (role !== "safe") return true;
+      if (showSafeZones) return true;
+      return showToolZones && TOOL_LABELS.has(z.label);
+    })
     .filter((z) => !IGNORED_LABELS.has(z.label));
 
   const labelIndex = new Map<string, number>();
@@ -82,34 +150,54 @@ export function renderBoundaryOverlay(
     if (!labelIndex.has(z.label)) labelIndex.set(z.label, idx++);
   }
 
-  const lineWidth = getLineWidth(boundaryLine, width);
+  const scale = width / 1920;
   const lineDash =
     boundaryLine.style === "dashed"
-      ? [boundaryLine.dashLength, boundaryLine.gapLength]
+      ? [6 * scale, 8 * scale]
       : [];
+
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
 
   for (const zone of visibleZones) {
     const polygons = normalizePolygons(zone.points);
     const color = getBoundaryColor(zone.label);
+    const role = classifyZone(zone.label);
     const zoneAlpha = animManager?.getHint(zone.label)?.opacity ?? 1;
+    const fillOpacity = boundaryFill.opacity * (role === "safe" ? 0.85 : role === "danger" ? 1.15 : 1) * zoneAlpha;
+    const glowOpacity = boundaryLine.opacity * (role === "safe" ? 0.88 : role === "danger" ? 1 : 0.92) * zoneAlpha;
+    const glowWidth = (role === "danger" ? 4.2 : 3) * scale;
+    const coreWidth = (role === "danger" ? 1.45 : 1.1) * scale;
 
     for (const poly of polygons) {
       if (poly.length < 2) continue;
 
-      ctx.beginPath();
-      ctx.moveTo(poly[0].x * (width - 1), poly[0].y * (height - 1));
-      for (let i = 1; i < poly.length; i++) {
-        ctx.lineTo(poly[i].x * (width - 1), poly[i].y * (height - 1));
-      }
-      ctx.closePath();
-
-      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${boundaryFill.opacity * zoneAlpha})`;
+      pathSmoothedPolygon(ctx, poly, width, height);
+      ctx.save();
+      ctx.globalCompositeOperation = "overlay";
+      ctx.globalAlpha = Math.min(1, fillOpacity);
+      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},1)`;
       ctx.fill();
+      ctx.restore();
 
+      pathSmoothedPolygon(ctx, poly, width, height);
+      ctx.save();
       ctx.setLineDash(lineDash);
-      ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${boundaryLine.opacity * zoneAlpha})`;
-      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${Math.min(1, glowOpacity)})`;
+      ctx.lineWidth = glowWidth;
+      ctx.shadowColor = `rgba(${color.r},${color.g},${color.b},${Math.min(1, glowOpacity)})`;
+      ctx.shadowBlur = 10 * scale * (role === "danger" ? 1.28 : 1);
       ctx.stroke();
+      ctx.restore();
+
+      pathSmoothedPolygon(ctx, poly, width, height);
+      ctx.save();
+      ctx.setLineDash(lineDash);
+      ctx.strokeStyle = `rgba(255,255,255,${Math.min(0.96, 0.72 * zoneAlpha)})`;
+      ctx.lineWidth = coreWidth;
+      ctx.stroke();
+      ctx.restore();
+
       ctx.setLineDash([]);
     }
   }
@@ -140,15 +228,16 @@ export function renderBoundaryOverlay(
     ctx.translate(smoothed.x - width * 0.015, smoothed.y + height * 0.04);
     ctx.scale(scale, scale);
 
+    const displayLabel = getBoundaryDisplayLabel(zone.label, abbreviateLabels);
     const bh = fontSize + overlayLabel.paddingY * 2;
-    drawLabelBadge(ctx, zone.label, fontSize, labelAlpha);
+    drawLabelBadge(ctx, displayLabel, fontSize, labelAlpha);
 
     if (hint?.flashing) {
       const iconAlpha = hint.opacity;
       const svgH = 13;
       const scale2 = (bh / svgH) * 0.7;
       const gap = 8;
-      const bw = ctx.measureText(zone.label).width + overlayLabel.paddingX * 2;
+      const bw = ctx.measureText(displayLabel).width + overlayLabel.paddingX * 2;
       const cx2 = -bw / 2 - gap - 7 * scale2;
 
       ctx.save();
@@ -190,6 +279,7 @@ export function renderLinesOverlay(
   width = MASK_WIDTH,
   height = MASK_HEIGHT,
   animManager?: BoundaryAnimationManager,
+  abbreviateLabels = false,
 ): void {
   const ctx = setupCanvas(canvas, width, height);
 
@@ -201,6 +291,7 @@ export function renderLinesOverlay(
 
   const lineWidth = getLineWidth(annotationLine, width);
   const fontSize = getOverlayFontSize(width);
+  const scale = width / 1920;
 
   ctx.lineJoin = "round";
 
@@ -237,8 +328,21 @@ export function renderLinesOverlay(
     }
 
     ctx.setLineDash(lineDash);
-    ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${annotationLine.opacity})`;
-    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = `rgba(${color.r},${color.g},${color.b},0.9)`;
+    ctx.lineWidth = 5.5 * scale;
+    ctx.shadowColor = `rgba(${color.r},${color.g},${color.b},0.95)`;
+    ctx.shadowBlur = 10 * scale;
+    ctx.beginPath();
+    ctx.moveTo(line.points[0].x * (width - 1), line.points[0].y * (height - 1));
+    for (let i = 1; i < line.points.length; i++) {
+      ctx.lineTo(line.points[i].x * (width - 1), line.points[i].y * (height - 1));
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.setLineDash(lineDash);
+    ctx.strokeStyle = `rgba(255,255,255,0.78)`;
+    ctx.lineWidth = 2.35 * scale;
     ctx.beginPath();
     ctx.moveTo(line.points[0].x * (width - 1), line.points[0].y * (height - 1));
     for (let i = 1; i < line.points.length; i++) {
@@ -259,7 +363,7 @@ export function renderLinesOverlay(
     ctx.font = `${fontSize}px system-ui, sans-serif`;
     ctx.save();
     ctx.translate(mx, my);
-    drawLabelBadge(ctx, line.label, fontSize);
+    drawLabelBadge(ctx, getBoundaryDisplayLabel(line.label, abbreviateLabels), fontSize);
     ctx.restore();
   }
 }

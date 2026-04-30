@@ -63,7 +63,7 @@ export const overlayLabel = {
 
 // ── ROLE CLASSIFICATION ───────────────────────────────────────────────────
 export const TARGET_LABELS = new Set<string>(["Aortic root"]);
-export const AVOID_LABELS = new Set<string>(["Auricles"]);
+export const AVOID_LABELS = new Set<string>(["Auricles", "Right atrium"]);
 export const CAUTION_LABELS = new Set<string>(["Epicardial fat on aortic"]);
 export const TOOL_LABELS = new Set<string>(["Grasper", "Needle holders"]);
 
@@ -90,10 +90,19 @@ export const annotationLine = {
 export const KNOWN_COLORS: Record<string, string> = {
   "Aortic root": "#22C55E",
   "Auricles": "#EF4444",
+  "Right atrium": "#EF4444",
   "Epicardial fat on aortic": "#FFAA00",
   "Grasper": "#3B82F6",
   "Needle holders": "#88EEFF",
 };
+
+export const DISPLAY_NAMES: Record<string, string> = {
+  "Auricles": "Right atrium",
+};
+
+export function getDisplayName(label: string): string {
+  return DISPLAY_NAMES[label] ?? label;
+}
 
 export const EXTRA_COLORS: string[] = ["#AA66FF", "#FF44AA", "#00FFCC", "#FFEE00"];
 

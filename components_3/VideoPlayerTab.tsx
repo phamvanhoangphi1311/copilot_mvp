@@ -10,7 +10,7 @@ import SideBar from "@/components_3/SideBar";
 import { Zone } from "@/lib/types";
 import { BoundaryAnimationManager } from "@/lib/BoundaryAnimationManager";
 import { createClassifiedZone } from "@/lib/ZoneFactory";
-import { getRole } from "@/components_3/overlayConfig";
+import { getDisplayName, getRole } from "@/components_3/overlayConfig";
 
 interface FramePoints { frameNum: number; zones: BoundaryZone[]; lines: LineAnnotation[]; }
 interface FrameRleMasks { frameNum: number; tags: SegmentationTag[]; }
@@ -54,24 +54,6 @@ interface MediaRect {
   width: number;
   height: number;
 }
-
-interface CopilotState {
-  stageKey: "scan" | "focus" | "suture";
-  stageLabel: string;
-  stageColor: string;
-  primaryCue: string;
-  secondaryCue: string;
-}
-
-type TargetIconStyle =
-  | "lock"
-  | "crosshair"
-  | "pulse"
-  | "brackets"
-  | "diamond"
-  | "rings"
-  | "pin"
-  | "scan";
 
 function timeToFrameIndex(t: number, fps: number, count: number): number {
   return Math.min(Math.max(Math.round(t * fps), 0), count - 1);
@@ -274,7 +256,6 @@ export default function VideoPlayerTab({
   const [showToolZones, setShowToolZones] = useState(false);
   const [showZoneLabels, setShowZoneLabels] = useState(true);
   const [showFullLabels, setShowFullLabels] = useState(false);
-  const [targetIconStyle, setTargetIconStyle] = useState<TargetIconStyle>("lock");
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -402,73 +383,6 @@ export default function VideoPlayerTab({
     [needleAnchor, needlePixelBounds, overlaySize, showFullLabels]
   );
   const activeZoneName = hoveredZoneName ?? pinnedZoneName;
-  const copilot = useMemo<CopilotState>(() => {
-    const has = (label: string) => currentZoneNames.has(label);
-    const hasNeedle = has("Needle holders");
-    const overviewWindow = duration > 0 ? Math.min(4.5, duration * 0.16) : 4.5;
-
-    if (hasNeedle) {
-      return {
-        stageKey: "suture",
-        stageLabel: "Suturing Assist",
-        stageColor: "#22c55e",
-        primaryCue: "Center trajectory on AR. Keep path clear of avoid zones.",
-        secondaryCue: "Auricles remain visible in the working field.",
-      };
-    }
-
-    if (currentTime <= overviewWindow) {
-      return {
-        stageKey: "scan",
-        stageLabel: "Field Scan",
-        stageColor: "#FFD700",
-        primaryCue: "Initial scan: note avoid region and caution tissue.",
-        secondaryCue: "Review highlighted structures and keep-out areas.",
-      };
-    }
-
-    return {
-      stageKey: "focus",
-      stageLabel: "Target Focus",
-      stageColor: "#22c55e",
-      primaryCue: "Working window ready. Focus the next approach on AR.",
-      secondaryCue: "Advance only after the target is clearly exposed.",
-    };
-  }, [currentZoneNames, currentTime, duration]);
-
-  const procedureGuidance = useMemo(() => {
-    const highlighted = pinnedZoneName;
-    if (highlighted === "Aortic root") {
-      return {
-        objective: "Keep target exposure stable and maintain central reticle alignment.",
-        primaryAvoid: "Do not drift toward the auricles while working the target edge.",
-        nextAction: "Advance only when the target contour remains clean and continuously visible.",
-      };
-    }
-    if (highlighted === "Auricles") {
-      return {
-        objective: "Review the avoid structure boundary before continuing the maneuver.",
-        primaryAvoid: "Auricles remain the dominant keep-out zone in this frame.",
-        nextAction: "Maintain instrument path outside the highlighted avoid boundary.",
-      };
-    }
-    if (highlighted === "Epicardial fat on aortic") {
-      return {
-        objective: "Use the caution tissue as a reference, not as a working target.",
-        primaryAvoid: "Do not confuse caution tissue with the actual target corridor.",
-        nextAction: "Re-center on the aortic root once tissue context is confirmed.",
-      };
-    }
-
-    return {
-      objective: copilot.primaryCue,
-      primaryAvoid: currentZoneNames.has("Auricles")
-        ? "Auricles remain visible as the primary keep-out zone."
-        : "No avoid structure is dominant in the current frame.",
-      nextAction: copilot.secondaryCue,
-    };
-  }, [copilot.primaryCue, copilot.secondaryCue, currentZoneNames, pinnedZoneName]);
-
   const jb = "font-[family-name:var(--font-geist-mono)]";
 
   // ── Data loading ────────────────────────────────────────────────────────
@@ -636,7 +550,7 @@ export default function VideoPlayerTab({
   // ── OVERLAY RENDER — MERGED ──
   //   • Border: glow + core sharp từ Code 1, ĐỔI THÀNH NÉT ĐỨT
   //   • Fill:   globalCompositeOperation = "overlay" từ Code 2 (tint mô, giữ highlight)
-  //   • Màu:    AR xanh lá, EF cam, AUC đỏ.
+  //   • Màu:    AR xanh lá, EF cam, RA đỏ.
   // ═══════════════════════════════════════════════════════════════════════
   const renderOverlay = useCallback(() => {
     const v = videoRef.current;
@@ -727,7 +641,7 @@ export default function VideoPlayerTab({
         glowColor = "rgba(255, 170, 0, 0.85)";
         fillColor = "rgba(255, 170, 0, 0.18)";
       } else if (role === "avoid") {
-        glowColor = "rgba(248, 45, 45, 0.98)";
+        glowColor = "rgba(239, 68, 68, 0.98)";
         coreColor = "rgba(254, 226, 226, 0.95)";
         fillColor = "rgba(239, 68, 68, 0.26)";
         shadowBoost = 1.28;
@@ -872,6 +786,10 @@ export default function VideoPlayerTab({
     if (role === "avoid" || role === "caution") setShowDangerZone(true);
   }, []);
 
+  const targetIconColor = "#16A34A";
+  const targetIconFill = "rgba(22, 163, 74, 0.18)";
+  const targetIconShadow = `drop-shadow(0 0 9px ${targetIconColor})`;
+
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(6,15,24,0.98),rgba(5,11,18,0.95))]">
       {showToolbars && (
@@ -926,24 +844,6 @@ export default function VideoPlayerTab({
                     >
                       {showFullLabels ? "Short Labels" : "Full Labels"}
                     </button>
-                  )}
-
-                  {showTargetZone && (
-                    <select
-                      value={targetIconStyle}
-                      onChange={(event) => setTargetIconStyle(event.target.value as TargetIconStyle)}
-                      className="rounded-xl border border-sky-500/30 bg-[#07111d] px-3 py-1.5 text-xs font-semibold text-sky-100 outline-none transition-colors hover:border-sky-400/45 hover:bg-[#0b1b2b] hover:text-white"
-                      aria-label="Target icon style"
-                    >
-                      <option className="bg-[#07111d] text-sky-100" value="lock">Target Lock</option>
-                      <option className="bg-[#07111d] text-sky-100" value="crosshair">Crosshair</option>
-                      <option className="bg-[#07111d] text-sky-100" value="pulse">Pulse Ring</option>
-                      <option className="bg-[#07111d] text-sky-100" value="brackets">Brackets</option>
-                      <option className="bg-[#07111d] text-sky-100" value="diamond">Diamond</option>
-                      <option className="bg-[#07111d] text-sky-100" value="rings">Double Rings</option>
-                      <option className="bg-[#07111d] text-sky-100" value="pin">Pinpoint</option>
-                      <option className="bg-[#07111d] text-sky-100" value="scan">Scan Box</option>
-                    </select>
                   )}
 
                   <button
@@ -1058,13 +958,11 @@ export default function VideoPlayerTab({
           isOpen
           zones={detectedZones.filter(z => currentZoneNames.has(z.id))}
           legendHidden={legendHidden}
-          focusMode={focusMode}
           hoveredZoneName={hoveredZoneName}
           pinnedZoneName={pinnedZoneName}
           onLegendToggle={() => setLegendHidden((value) => !value)}
           onZoneHover={setHoveredZoneName}
           onZonePin={handleLegendZonePin}
-          procedureGuidance={procedureGuidance}
         />
 
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -1143,7 +1041,7 @@ export default function VideoPlayerTab({
                        }}
                      >
                       <div className="rounded-[3px] bg-black/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.75)]">
-                        {showFullLabels ? "Auricles" : "AUC"}
+                        {showFullLabels ? "Right atrium" : "RA"}
                       </div>
                     </div>
                   )}
@@ -1184,117 +1082,18 @@ export default function VideoPlayerTab({
                   <svg className="pointer-events-none absolute inset-0 z-[12] h-full w-full" viewBox={`0 0 ${dimensions.width} ${dimensions.height}`} preserveAspectRatio="xMidYMid meet">
                     {targetBounds && (
                       <g transform={`translate(${targetBounds.cx * dimensions.width}, ${targetBounds.cy * dimensions.height})`}>
-                        {targetIconStyle === "lock" && (
-                          <>
-                            <circle r="19" fill="rgba(20,83,45,0.22)" stroke="#14532d" strokeWidth="2" opacity="0.98" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }} />
-                            <circle r="29" fill="none" stroke="#166534" strokeWidth="2" opacity="0.78">
-                              <animate attributeName="r" values="24;35;24" dur="2.4s" repeatCount="indefinite" />
-                              <animate attributeName="opacity" values="0.82;0.22;0.82" dur="2.4s" repeatCount="indefinite" />
-                            </circle>
-                            <g>
-                              <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="8s" repeatCount="indefinite" />
-                              <path d="M -30 -12 L -30 -30 L -12 -30 M 12 -30 L 30 -30 L 30 -12 M 30 12 L 30 30 L 12 30 M -12 30 L -30 30 L -30 12" fill="none" stroke="#14532d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.98" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }} />
-                              <circle r="23" fill="none" stroke="#22c55e" strokeWidth="1.6" strokeDasharray="5 8" opacity="0.9" />
-                              <line x1="-35" y1="0" x2="-21" y2="0" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
-                              <line x1="21" y1="0" x2="35" y2="0" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
-                              <line x1="0" y1="-35" x2="0" y2="-21" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
-                              <line x1="0" y1="21" x2="0" y2="35" stroke="#dcfce7" strokeWidth="2" strokeLinecap="round" />
-                            </g>
-                          </>
-                        )}
-                        {targetIconStyle === "crosshair" && (
-                          <>
-                            <circle r="22" fill="rgba(20,83,45,0.18)" stroke="#14532d" strokeWidth="2.4" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }}>
-                              <animate attributeName="r" values="20;24;20" dur="2.2s" repeatCount="indefinite" />
-                              <animate attributeName="opacity" values="0.95;0.62;0.95" dur="2.2s" repeatCount="indefinite" />
-                            </circle>
-                            <circle r="12" fill="none" stroke="#dcfce7" strokeWidth="1.6" opacity="0.95">
-                              <animate attributeName="r" values="10;13;10" dur="2.2s" repeatCount="indefinite" />
-                            </circle>
-                            <line x1="-36" y1="0" x2="-16" y2="0" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
-                            <line x1="16" y1="0" x2="36" y2="0" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
-                            <line x1="0" y1="-36" x2="0" y2="-16" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
-                            <line x1="0" y1="16" x2="0" y2="36" stroke="#14532d" strokeWidth="3" strokeLinecap="round" />
-                          </>
-                        )}
-                        {targetIconStyle === "pulse" && (
-                          <>
-                            <circle r="13" fill="rgba(20,83,45,0.24)" stroke="#dcfce7" strokeWidth="1.8">
-                              <animate attributeName="r" values="11;14;11" dur="1.8s" repeatCount="indefinite" />
-                            </circle>
-                            <circle r="25" fill="none" stroke="#14532d" strokeWidth="2.8" opacity="0.86" style={{ filter: "drop-shadow(0 0 8px #16a34a)" }}>
-                              <animate attributeName="r" values="18;38;18" dur="1.8s" repeatCount="indefinite" />
-                              <animate attributeName="opacity" values="0.9;0.12;0.9" dur="1.8s" repeatCount="indefinite" />
-                            </circle>
-                            <circle r="34" fill="none" stroke="#22c55e" strokeWidth="1.4" strokeDasharray="4 7" opacity="0.72">
-                              <animate attributeName="stroke-dashoffset" values="0;22" dur="2.4s" repeatCount="indefinite" />
-                            </circle>
-                          </>
-                        )}
-                        {targetIconStyle === "brackets" && (
-                          <>
-                            <path d="M -34 -10 L -34 -34 L -10 -34 M 10 -34 L 34 -34 L 34 -10 M 34 10 L 34 34 L 10 34 M -10 34 L -34 34 L -34 10" fill="none" stroke="#14532d" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.98" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
-                              <animate attributeName="opacity" values="0.98;0.58;0.98" dur="2.1s" repeatCount="indefinite" />
-                            </path>
-                            <path d="M -24 0 L -11 0 M 11 0 L 24 0 M 0 -24 L 0 -11 M 0 11 L 0 24" fill="none" stroke="#dcfce7" strokeWidth="2.2" strokeLinecap="round" />
-                            <circle r="15" fill="rgba(20,83,45,0.16)" stroke="#22c55e" strokeWidth="1.8" strokeDasharray="3 6">
-                              <animate attributeName="r" values="13;18;13" dur="2.1s" repeatCount="indefinite" />
-                              <animate attributeName="stroke-dashoffset" values="0;18" dur="2.1s" repeatCount="indefinite" />
-                            </circle>
-                          </>
-                        )}
-                        {targetIconStyle === "diamond" && (
-                          <>
-                            <path d="M 0 -34 L 34 0 L 0 34 L -34 0 Z" fill="rgba(20,83,45,0.16)" stroke="#14532d" strokeWidth="3.2" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
-                              <animate attributeName="opacity" values="0.95;0.58;0.95" dur="2.6s" repeatCount="indefinite" />
-                            </path>
-                            <path d="M 0 -22 L 22 0 L 0 22 L -22 0 Z" fill="none" stroke="#dcfce7" strokeWidth="1.8" strokeDasharray="5 7" opacity="0.9">
-                              <animate attributeName="stroke-dashoffset" values="0;24" dur="2.6s" repeatCount="indefinite" />
-                            </path>
-                            <line x1="-32" y1="0" x2="-17" y2="0" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" />
-                            <line x1="17" y1="0" x2="32" y2="0" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" />
-                          </>
-                        )}
-                        {targetIconStyle === "rings" && (
-                          <>
-                            <circle r="31" fill="rgba(20,83,45,0.12)" stroke="#14532d" strokeWidth="3" opacity="0.95" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
-                              <animate attributeName="r" values="29;33;29" dur="2.8s" repeatCount="indefinite" />
-                            </circle>
-                            <circle r="21" fill="none" stroke="#dcfce7" strokeWidth="1.6" strokeDasharray="6 8" opacity="0.86">
-                              <animate attributeName="stroke-dashoffset" values="0;28" dur="2.8s" repeatCount="indefinite" />
-                            </circle>
-                            <circle r="12" fill="none" stroke="#22c55e" strokeWidth="2" opacity="0.9">
-                              <animate attributeName="r" values="10;13;10" dur="2.8s" repeatCount="indefinite" />
-                            </circle>
-                            <path d="M -38 0 L -28 0 M 28 0 L 38 0 M 0 -38 L 0 -28 M 0 28 L 0 38" fill="none" stroke="#14532d" strokeWidth="2.6" strokeLinecap="round" />
-                          </>
-                        )}
-                        {targetIconStyle === "pin" && (
-                          <>
-                            <circle r="26" cy="-14" fill="none" stroke="#22c55e" strokeWidth="1.6" opacity="0.5">
-                              <animate attributeName="r" values="18;32;18" dur="2s" repeatCount="indefinite" />
-                              <animate attributeName="opacity" values="0.55;0.1;0.55" dur="2s" repeatCount="indefinite" />
-                            </circle>
-                            <path d="M 0 -38 C 13 -38 23 -28 23 -16 C 23 1 0 34 0 34 C 0 34 -23 1 -23 -16 C -23 -28 -13 -38 0 -38 Z" fill="rgba(20,83,45,0.18)" stroke="#14532d" strokeWidth="3" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
-                              <animate attributeName="opacity" values="0.98;0.72;0.98" dur="2s" repeatCount="indefinite" />
-                            </path>
-                            <circle r="12" cy="-14" fill="rgba(220,252,231,0.18)" stroke="#dcfce7" strokeWidth="1.8" />
-                            <path d="M -17 16 Q 0 24 17 16" fill="none" stroke="#22c55e" strokeWidth="1.8" strokeLinecap="round" opacity="0.85" />
-                          </>
-                        )}
-                        {targetIconStyle === "scan" && (
-                          <>
-                            <rect x="-32" y="-32" width="64" height="64" rx="7" fill="rgba(20,83,45,0.12)" stroke="#14532d" strokeWidth="3" strokeDasharray="9 8" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }}>
-                              <animate attributeName="stroke-dashoffset" values="0;34" dur="2.1s" repeatCount="indefinite" />
-                            </rect>
-                            <line x1="-25" y1="-12" x2="25" y2="-12" stroke="#dcfce7" strokeWidth="1.6" strokeLinecap="round" opacity="0.85">
-                              <animate attributeName="y1" values="-18;18;-18" dur="2.1s" repeatCount="indefinite" />
-                              <animate attributeName="y2" values="-18;18;-18" dur="2.1s" repeatCount="indefinite" />
-                            </line>
-                            <path d="M -26 0 L -12 0 M 12 0 L 26 0 M 0 -26 L 0 -12 M 0 12 L 0 26" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" />
-                          </>
-                        )}
-                        <circle r="5.2" fill="#dcfce7" stroke="#14532d" strokeWidth="2.2" style={{ filter: "drop-shadow(0 0 9px #16a34a)" }} />
+                        <circle r="22" fill={targetIconFill} stroke={targetIconColor} strokeWidth="2.4" style={{ filter: targetIconShadow }}>
+                          <animate attributeName="r" values="20;24;20" dur="2.2s" repeatCount="indefinite" />
+                          <animate attributeName="opacity" values="0.95;0.62;0.95" dur="2.2s" repeatCount="indefinite" />
+                        </circle>
+                        <circle r="12" fill="none" stroke="#dcfce7" strokeWidth="1.6" opacity="0.95">
+                          <animate attributeName="r" values="10;13;10" dur="2.2s" repeatCount="indefinite" />
+                        </circle>
+                        <line x1="-36" y1="0" x2="-16" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                        <line x1="16" y1="0" x2="36" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                        <line x1="0" y1="-36" x2="0" y2="-16" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                        <line x1="0" y1="16" x2="0" y2="36" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                        <circle r="5.2" fill="#dcfce7" stroke={targetIconColor} strokeWidth="2.2" style={{ filter: targetIconShadow }} />
                         <circle r="1.8" fill="#052e16" />
                       </g>
                     )}

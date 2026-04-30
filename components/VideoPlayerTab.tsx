@@ -72,6 +72,7 @@ export default function VideoPlayerTab({
   const [error, setError] = useState<string | null>(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(false);
+  const [showFullLabels, setShowFullLabels] = useState(false);
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState<string>("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -287,6 +288,10 @@ export default function VideoPlayerTab({
 
   useEffect(() => () => revokeObjectUrl(), []);
 
+  useEffect(() => {
+    lastLinesFrameIndexRef.current = -1;
+  }, [showFullLabels]);
+
   // Auto-load from the default directory on mount.
   useEffect(() => {
     if (dirPath && dirPath.trim()) {
@@ -356,8 +361,17 @@ export default function VideoPlayerTab({
     const visibleLabels = new Set(zones.map((z) => z.label));
     animManagerRef.current.update(visibleLabels, video.currentTime);
 
-    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current, showSafeZones);
-  }, [showOverlay, getZonesForTime, dimensions, fps, framePoints, showSafeZones]);
+    renderBoundaryOverlay(
+      canvas,
+      zones,
+      dimensions.width || 1920,
+      dimensions.height || 1080,
+      animManagerRef.current,
+      showSafeZones,
+      false,
+      !showFullLabels,
+    );
+  }, [showOverlay, getZonesForTime, dimensions, fps, framePoints, showSafeZones, showFullLabels]);
 
   // Draws line annotations onto `linesCanvasRef` for the current frame.
   // Skips the render when the frame index has not changed since the last call
@@ -388,8 +402,15 @@ export default function VideoPlayerTab({
 
     const visibleLineLabels = new Set(entry.lines.map((l) => l.label));
     linesAnimManagerRef.current.update(visibleLineLabels, video.currentTime);
-    renderLinesOverlay(canvas, entry.lines, dimensions.width || 1920, dimensions.height || 1080, linesAnimManagerRef.current);
-  }, [showLines, framePoints, fps, dimensions, videoSrc]);
+    renderLinesOverlay(
+      canvas,
+      entry.lines,
+      dimensions.width || 1920,
+      dimensions.height || 1080,
+      linesAnimManagerRef.current,
+      !showFullLabels,
+    );
+  }, [showLines, framePoints, fps, dimensions, videoSrc, showFullLabels]);
 
   // Draws RLE segmentation masks onto `masksCanvasRef` for the current frame.
   // Same skip-if-unchanged optimisation as renderLinesOverlayCallback.
@@ -507,16 +528,30 @@ export default function VideoPlayerTab({
             </button>
 
             {showOverlay && (
-              <button
-                onClick={() => setShowSafeZones((v) => !v)}
-                className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                  showSafeZones
-                    ? "border-green-500 bg-green-500/20 text-green-300"
-                    : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
-                }`}
-              >
-                {showSafeZones ? "Hide Safe Zones" : "Show Safe Zones"}
-              </button>
+              <>
+                <button
+                  onClick={() => setShowFullLabels((v) => !v)}
+                  className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                    showFullLabels
+                      ? "border-amber-500 bg-amber-500/20 text-amber-300"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                  }`}
+                >
+                  {showFullLabels ? "Short Labels" : "Full Labels"}
+                </button>
+
+                <button
+                  onClick={() => setShowSafeZones((v) => !v)}
+                  className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                    showSafeZones
+                      ? "border-green-500 bg-green-500/20 text-green-300"
+                      : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                  }`}
+                >
+                  {showSafeZones ? "Hide Safe Zones" : "Show Safe Zones"}
+                </button>
+
+              </>
             )}
 
             {frameRleMasks.length > 0 && (

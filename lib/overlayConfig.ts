@@ -16,35 +16,35 @@ export const boundaryLine = {
    * Fixed stroke width in pixels.
    * Set to 0 to auto-scale with canvas resolution using `autoScaleDivisor`.
    */
-  lineWidth: 8,
+  lineWidth: 0,
 
   /**
    * Used when lineWidth === 0:
    *   computedWidth = max(minWidth, round(canvasWidth / autoScaleDivisor))
    */
-  autoScaleDivisor: 600,
+  autoScaleDivisor: 760,
 
   /** Minimum stroke width when auto-scaling (px). */
   minWidth: 2,
 
   /** Stroke style: "solid" or "dashed". */
-  style: "solid" as "solid" | "dashed",
+  style: "dashed" as "solid" | "dashed",
 
   /** Length of each dash in pixels (only used when style === "dashed"). */
-  dashLength: 24,
+  dashLength: 6,
 
   /** Length of each gap in pixels (only used when style === "dashed"). */
   gapLength: 8,
 
   /** Stroke opacity (0–1). Applied on top of the per-label colour. */
-  opacity: 1,
+  opacity: 0.96,
 };
 
 // ── Boundary fill ─────────────────────────────────────────────────────────────
 
 export const boundaryFill = {
   /** Semi-transparent fill opacity for the polygon interior (0–1). */
-  opacity: 0.2,
+  opacity: 0.08,
 };
 
 // ── Label badge (shared by boundary and segmentation overlays) ────────────────
@@ -94,6 +94,10 @@ export const SAFE_LABELS = new Set<string>([
   "Anterior MV (A1)",
   "Anterior MV (A2)"
 ]);
+export const TOOL_LABELS = new Set<string>([
+  "Grasper",
+  "Needle holders",
+]);
 export const OTHER_LABELS = new Set<string>([
   "Epicardial adipose tissue",
   "Epicardial fat on aortic"
@@ -120,7 +124,7 @@ export const annotationLine = {
    * Fixed stroke width in pixels.
    * Set to 0 to auto-scale: computedWidth = max(minWidth, round(canvasWidth / autoScaleDivisor))
    */
-  lineWidth: 4,
+  lineWidth: 3,
 
   /** Divisor for auto-scaling line width. */
   autoScaleDivisor: 320,
@@ -132,10 +136,10 @@ export const annotationLine = {
   style: "dashed" as "solid" | "dashed",
 
   /** Length of each dash in pixels (only used when style === "dashed"). */
-  dashLength: 24,
+  dashLength: 9,
 
   /** Length of each gap in pixels (only used when style === "dashed"). */
-  gapLength: 8,
+  gapLength: 7,
 
   /** Stroke opacity (0–1). */
   opacity: 1,
@@ -150,9 +154,9 @@ export const annotationLine = {
     /** Outer edge color (CSS hex). */
     outerColor: "#facc15",
     /** Total band thickness in pixels (outer edge width). */
-    width: 480,
+    width: 420,
     /** Peak opacity of the innermost band. */
-    opacity: 0.12,
+    opacity: 0.16,
   },
 };
 
