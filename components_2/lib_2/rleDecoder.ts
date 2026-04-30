@@ -111,14 +111,14 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
   // High danger (red) - Critical anatomical structures
   "Phrenic nerve": { r: 239, g: 68, b: 68 },        // Red - High danger
 
-  // Medium danger (orange) - Fat tissues
+  // Medium danger (orange) - Other anatomical structures
   "Epicardial adipose tissue": { r: 249, g: 115, b: 22 },  // Orange
   "Epicardial fat on aortic": { r: 251, g: 146, b: 60 },   // Light orange
+  "Aortic root": { r: 249, g: 115, b: 22 },                // Orange - Other
+  "Auricles": { r: 251, g: 146, b: 60 },                   // Light orange - Other
 
-  // Low danger (green) - Safe anatomical structures
-  "Pericardium": { r: 34, g: 197, b: 94 },          // Green - Safe
-  "Aortic root": { r: 22, g: 163, b: 74 },          // Dark green
-  "Auricles": { r: 74, g: 222, b: 128 },             // Light green
+  // Safe (green) - Safe anatomical structures
+  "Pericardium boundary": { r: 34, g: 197, b: 94 },        // Green - Safe
 
   // Tools (blue) - Surgical instruments
   "Grasper": { r: 59, g: 130, b: 246 },              // Blue - Tool
@@ -126,9 +126,6 @@ const KNOWN_COLORS: Record<string, LabelColor> = {
 
   // Pericardial stay sutures (purple)
   "Pericardial stay sutures": { r: 168, g: 85, b: 247 },  // Purple
-
-  // Pericardium boundary (teal)
-  "Pericardium boundary": { r: 20, g: 184, b: 166 }, // Teal
 
   // Band (yellow)
   "Band": { r: 234, g: 179, b: 8 },                  // Yellow
@@ -341,6 +338,7 @@ export function renderBoundaryOverlay(
   height = MASK_HEIGHT,
   animManager?: BoundaryAnimationManager,
   showSafeZones = false,
+  showToolLabels = false,
 ): void {
   canvas.width = width;
   canvas.height = height;
@@ -372,7 +370,8 @@ export function renderBoundaryOverlay(
 
   for (const zone of visibleZones) {
     if (zone.label === "Foreground") continue;
-    if (classifyZone(zone.label) === "tool") continue;
+    // Skip rendering for tool zones unless explicitly enabled
+    if (classifyZone(zone.label) === "tool" && !showToolLabels) continue;
     const polygons = normalizePolygons(zone.points);
     const color = getBoundaryColor(zone.label);
     const zoneAlpha = animManager?.getHint(zone.label)?.opacity ?? 1;
@@ -387,7 +386,12 @@ export function renderBoundaryOverlay(
       }
       ctx.closePath();
 
-      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${boundaryFill.opacity * zoneAlpha})`;
+      const category = classifyZone(zone.label);
+      const fillOpacity =
+        category === "danger" ? boundaryFill.dangerFillOpacity
+        : category === "other"  ? boundaryFill.otherFillOpacity
+        : boundaryFill.opacity;
+      ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${fillOpacity * zoneAlpha})`;
       ctx.fill();
 
       ctx.setLineDash(lineDash);
@@ -409,8 +413,8 @@ export function renderBoundaryOverlay(
 
   for (const zone of visibleZones) {
     if (zone.label === "Foreground") continue;
-    // Skip label rendering for tool zones
-    if (classifyZone(zone.label) === "tool") continue;
+    // Skip label rendering for tool zones unless explicitly enabled
+    if (classifyZone(zone.label) === "tool" && !showToolLabels) continue;
     const polygons = normalizePolygons(zone.points);
     const hint = animManager?.getHint(zone.label);
     const labelAlpha = hint?.labelOpacity ?? 1;

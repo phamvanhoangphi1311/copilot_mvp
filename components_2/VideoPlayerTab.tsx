@@ -26,11 +26,6 @@ interface FrameLabels {
   lines: LineAnnotation[];
 }
 
-interface FrameRleLabels {
-  frameNum: number;
-  tags: SegmentationTag[];
-}
-
 interface VideoPlayerTabProps {
   initialDir?: string;
 }
@@ -58,20 +53,19 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
   const [currentZoneNames, setCurrentZoneNames] = useState<Set<string>>(new Set());
   const objectUrlRef = useRef<string | null>(null);
   const labelsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [frameRleLabels, setFrameRleLabels] = useState<unknown[]>([]);
   const linesCanvasRef = useRef<HTMLCanvasElement>(null);
   const sutureCanvasRef = useRef<HTMLCanvasElement>(null);
-  const lastLabelFrameIndexRef = useRef<number>(-1);
   const lastLinesFrameIndexRef = useRef<number>(-1);
   const animManagerRef = useRef(new BoundaryAnimationManager());
   const linesAnimManagerRef = useRef(new BoundaryAnimationManager());
 
-  const [showLabels, setShowLabels] = useState(false);
+  const [showToolLabels, setShowToolLabels] = useState(false);
   const [showSutureHints] = useState(true);
   const lastSutureFrameIndexRef = useRef<number>(-1);
   const [showLines, setShowLines] = useState(true);
   const [showToolbars, setShowToolbars] = useState(true);
   const [isMouseOverVideo, setIsMouseOverVideo] = useState(false);
-  const [frameRleLabels, setFrameRleLabels] = useState<FrameRleLabels[]>([]);
 
   // Derive Zone[] from all frame labels for SideBar
   const detectedZones = useMemo((): Zone[] => {
@@ -102,20 +96,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
     parsed.sort((a, b) => a.frameNum - b.frameNum);
     return parsed;
   }, []);
-
-  // Parse labels.json (RLE) into per-frame label data
-  const parseRleLabels = useCallback(
-    (records: Array<{ image: string; tags: SegmentationTag[] }>) => {
-      const parsed: FrameRleLabels[] = records.map((rec) => {
-        const match = rec.image.match(/(\d+)/);
-        const frameNum = match ? parseInt(match[1], 10) : 0;
-        return { frameNum, tags: rec.tags };
-      });
-      parsed.sort((a, b) => a.frameNum - b.frameNum);
-      return parsed;
-    },
-    []
-  );
 
   // Load from server API (local directory path)
   const loadFromServer = useCallback(async () => {
@@ -149,31 +129,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
         setFrameLabels(parseLabels(labelsData));
       }
 
-      // Load RLE masks (optional — no error if missing)
-      const rleFile = info.files?.includes("masks.json")
-        ? "masks.json"
-        : info.files?.includes("labels.json")
-          ? "labels.json"
-          : null;
-
-      if (rleFile) {
-        try {
-          const rleRes = await fetch(
-            `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(rleFile)}`
-          );
-          if (rleRes.ok) {
-            const rleData = await rleRes.json();
-            setFrameRleLabels(Array.isArray(rleData) ? parseRleLabels(rleData) : []);
-          } else {
-            setFrameRleLabels([]);
-          }
-        } catch {
-          setFrameRleLabels([]);
-        }
-      } else {
-        setFrameRleLabels([]);
-      }
-
       // Set video source (streamed from API)
       setVideoSrc(
         `/api/local-files?dir=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(videoFile)}`
@@ -183,11 +138,10 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       setError(err instanceof Error ? err.message : "Failed to load");
       setVideoSrc(null);
       setFrameLabels([]);
-      setFrameRleLabels([]);
     } finally {
       setLoading(false);
     }
-  }, [dirPath, parseLabels, parseRleLabels]);
+  }, [dirPath, parseLabels]);
 
   // Load via File System Access API (browser picker)
   const loadFromPicker = useCallback(async () => {
@@ -241,7 +195,8 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
           const rleFile = await rleLabelsHandle.getFile();
           const rleText = await rleFile.text();
           const rleRecords = JSON.parse(rleText);
-          setFrameRleLabels(Array.isArray(rleRecords) ? parseRleLabels(rleRecords) : []);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setFrameRleLabels(Array.isArray(rleRecords) ? (rleRecords as any[]) : []);
         } catch {
           setFrameRleLabels([]);
         }
@@ -256,7 +211,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
     } finally {
       setLoading(false);
     }
-  }, [parseLabels, parseRleLabels]);
+  }, [parseLabels]);
 
   function revokeObjectUrl() {
     if (objectUrlRef.current) {
@@ -330,8 +285,8 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
     const visibleLabels = new Set(zones.map((z) => z.label));
     animManagerRef.current.update(visibleLabels, video.currentTime);
 
-    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current, showSafeZones);
-  }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels, showSafeZones]);
+    renderBoundaryOverlay(canvas, zones, dimensions.width || 1920, dimensions.height || 1080, animManagerRef.current, showSafeZones, showToolLabels);
+  }, [showOverlay, getZonesForTime, dimensions, fps, frameLabels, showSafeZones, showToolLabels]);
 
   // Render line annotations overlay
   const renderLinesOverlayCallback = useCallback(() => {
@@ -372,41 +327,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       linesAnimManagerRef.current
     );
   }, [showLines, frameLabels, fps, dimensions, videoSrc]);
-
-  // Render RLE segmentation labels on the labels canvas
-  const renderLabelsOverlay = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = labelsCanvasRef.current;
-    if (!canvas) return;
-
-    if (!video || !videoSrc || !showLabels || frameRleLabels.length === 0) {
-      if (lastLabelFrameIndexRef.current !== -1) {
-        const ctx = canvas.getContext("2d");
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-        lastLabelFrameIndexRef.current = -1;
-      }
-      return;
-    }
-
-    const frameIndex = Math.round(video.currentTime * fps);
-    const idx = Math.min(Math.max(frameIndex, 0), frameRleLabels.length - 1);
-    if (idx === lastLabelFrameIndexRef.current) return;
-    lastLabelFrameIndexRef.current = idx;
-
-    const entry = frameRleLabels[idx];
-    if (!entry || entry.tags.length === 0) {
-      const ctx = canvas.getContext("2d");
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-
-    renderSegmentationOverlay(
-      canvas,
-      entry.tags,
-      dimensions.width || 1920,
-      dimensions.height || 1080
-    );
-  }, [showLabels, frameRleLabels, fps, dimensions, videoSrc]);
 
   // Render suture hint overlay on the suture canvas
   const renderSutureOverlay = useCallback(() => {
@@ -471,7 +391,6 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
     function tick() {
       if (!running) return;
       renderOverlay();
-      renderLabelsOverlay();
       renderLinesOverlayCallback();
       renderSutureOverlay();
       if (video) setCurrentTime(video.currentTime);
@@ -483,7 +402,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
       running = false;
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [videoSrc, renderOverlay, renderLabelsOverlay, renderLinesOverlayCallback, renderSutureOverlay]);
+  }, [videoSrc, renderOverlay, renderLinesOverlayCallback, renderSutureOverlay]);
 
   // Play / Pause
   const togglePlay = useCallback(() => {
@@ -577,16 +496,16 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
               </button>
             )}
 
-                {frameRleLabels.length > 0 && (
+                {frameLabels.some((f) => f.zones.some((z) => z.label === "Grasper" || z.label === "Needle holder")) && (
                   <button
-                    onClick={() => setShowLabels((v) => !v)}
+                    onClick={() => setShowToolLabels((v) => !v)}
                     className={`rounded border px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                      showLabels
-                        ? "border-violet-500 bg-violet-500/20 text-violet-300"
+                      showToolLabels
+                        ? "border-sky-500 bg-sky-500/20 text-sky-300"
                         : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
                     }`}
                   >
-                    {showLabels ? "Hide Labels" : "Show Labels"}
+                    {showToolLabels ? "Hide Tool Labels" : "Show Tool Labels"}
                   </button>
                 )}
 
