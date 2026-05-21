@@ -50,6 +50,12 @@ export interface BoundaryRecord {
   lines?: LineAnnotation[];
 }
 
+export interface BoundaryOverlayPalette {
+  target: string;
+  avoid: string;
+  danger: string;
+}
+
 /** Normalize points field to always be an array of polygons. */
 function normalizePolygons(
   points: { x: number; y: number }[][] | { x: number; y: number }[],
@@ -60,7 +66,14 @@ function normalizePolygons(
 }
 
 /** Returns the boundary stroke/fill colour for a zone based on its danger classification. */
-function getBoundaryColor(label: string): MaskColor {
+function getBoundaryColor(label: string, palette?: BoundaryOverlayPalette): MaskColor {
+  if (palette) {
+    if (label === "Aortic root") return parseHex(palette.target);
+    if (label === "Auricles" || label === "Right atrium" || label === "Epicardial fat on aortic") {
+      return parseHex(palette.avoid);
+    }
+    if (classifyZone(label) === "danger") return parseHex(palette.danger);
+  }
   return CLASSIFIED_COLORS[classifyZone(label)];
 }
 
@@ -132,6 +145,7 @@ export function renderBoundaryOverlay(
   showSafeZones = false,
   showToolZones = false,
   abbreviateLabels = false,
+  palette?: BoundaryOverlayPalette,
 ): void {
   const ctx = setupCanvas(canvas, width, height);
 
@@ -161,7 +175,7 @@ export function renderBoundaryOverlay(
 
   for (const zone of visibleZones) {
     const polygons = normalizePolygons(zone.points);
-    const color = getBoundaryColor(zone.label);
+    const color = getBoundaryColor(zone.label, palette);
     const role = classifyZone(zone.label);
     const zoneAlpha = animManager?.getHint(zone.label)?.opacity ?? 1;
     const fillOpacity = boundaryFill.opacity * (role === "safe" ? 0.85 : role === "danger" ? 1.15 : 1) * zoneAlpha;

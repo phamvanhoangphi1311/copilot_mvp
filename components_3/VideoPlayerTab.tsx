@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   renderLinesOverlay,
-  BoundaryZone, BoundaryRecord, LineAnnotation,
+  BoundaryZone, BoundaryRecord, LineAnnotation, type BoundaryOverlayPalette,
 } from "@/lib/boundaryOverlay";
 import { renderSegmentationOverlay, SegmentationTag } from "@/lib/segmentationOverlay";
 import SideBar from "@/components_3/SideBar";
@@ -19,6 +19,13 @@ interface VideoPlayerTabProps {
   initialPoints?: BoundaryRecord[];
   initialMasks?: Array<{ image: string; tags: SegmentationTag[] }>;
   prefetchedDir?: string;
+  surgicalWorkspace?: boolean;
+  initialShowOverlay?: boolean;
+  initialShowFullLabels?: boolean;
+  initialShowToolZones?: boolean;
+  guidanceMode?: "voice" | "text" | "both";
+  overlayColors?: BoundaryOverlayPalette;
+  targetIconStyle?: "reticle" | "crosshair" | "pulse";
 }
 
 interface ZoneBounds {
@@ -134,6 +141,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  const full = clean.length === 3
+    ? clean.split("").map((char) => `${char}${char}`).join("")
+    : clean.padEnd(6, "0").slice(0, 6);
+  const value = Number.parseInt(full, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function getContainedMediaRect(
   containerWidth: number,
   containerHeight: number,
@@ -237,6 +256,17 @@ export default function VideoPlayerTab({
   initialPoints = [],
   initialMasks = [],
   prefetchedDir = "",
+  surgicalWorkspace = false,
+  initialShowOverlay = true,
+  initialShowFullLabels = false,
+  initialShowToolZones = false,
+  guidanceMode = "both",
+  overlayColors = {
+    target: "#16A34A",
+    avoid: "#F59E0B",
+    danger: "#EF4444",
+  },
+  targetIconStyle = "reticle",
 }: VideoPlayerTabProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -250,12 +280,12 @@ export default function VideoPlayerTab({
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showOverlay, setShowOverlay] = useState(true);
+  const [showOverlay, setShowOverlay] = useState(initialShowOverlay);
   const [showTargetZone, setShowTargetZone] = useState(true);
   const [showDangerZone, setShowDangerZone] = useState(true);
-  const [showToolZones, setShowToolZones] = useState(false);
+  const [showToolZones, setShowToolZones] = useState(initialShowToolZones);
   const [showZoneLabels, setShowZoneLabels] = useState(true);
-  const [showFullLabels, setShowFullLabels] = useState(false);
+  const [showFullLabels, setShowFullLabels] = useState(initialShowFullLabels);
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -271,7 +301,7 @@ export default function VideoPlayerTab({
   const linesAnimManagerRef = useRef(new BoundaryAnimationManager());
   const [showMasks, setShowMasks] = useState(false);
   const [showLines, setShowLines] = useState(true);
-  const [showToolbars, setShowToolbars] = useState(true);
+  const [showToolbars, setShowToolbars] = useState(!surgicalWorkspace);
   const [focusMode, setFocusMode] = useState(false);
   const [isMouseOverVideo, setIsMouseOverVideo] = useState(false);
   const [legendHidden, setLegendHidden] = useState(false);
@@ -633,17 +663,17 @@ export default function VideoPlayerTab({
       let shadowBoost = 1;
 
       if (isTarget) {
-        glowColor = "rgba(22, 163, 74, 1)";
+        glowColor = hexToRgba(overlayColors.target, 1);
         coreColor = "rgba(220, 252, 231, 0.98)";
-        fillColor = "rgba(22, 163, 74, 0.34)"; // alpha cao hơn vì dùng overlay blend
+        fillColor = hexToRgba(overlayColors.target, 0.34); // alpha cao hơn vì dùng overlay blend
         shadowBoost = 1.75;
       } else if (role === "caution") {
-        glowColor = "rgba(255, 170, 0, 0.85)";
-        fillColor = "rgba(255, 170, 0, 0.18)";
+        glowColor = hexToRgba(overlayColors.avoid, 0.85);
+        fillColor = hexToRgba(overlayColors.avoid, 0.18);
       } else if (role === "avoid") {
-        glowColor = "rgba(239, 68, 68, 0.98)";
+        glowColor = hexToRgba(overlayColors.danger, 0.98);
         coreColor = "rgba(254, 226, 226, 0.95)";
-        fillColor = "rgba(239, 68, 68, 0.26)";
+        fillColor = hexToRgba(overlayColors.danger, 0.26);
         shadowBoost = 1.28;
       } else if (zone.label === "Grasper") {
         glowColor = "rgba(59, 130, 246, 0.85)";
@@ -699,7 +729,7 @@ export default function VideoPlayerTab({
     toolZones.forEach(z => drawZone(z, false));
     if (targetZone) drawZone(targetZone, true);
 
-  }, [activeZoneName, showDangerZone, showOverlay, showTargetZone, showToolZones, getZonesForTime, fps, framePoints, dimensions, focusMode]);
+  }, [activeZoneName, showDangerZone, showOverlay, showTargetZone, showToolZones, getZonesForTime, fps, framePoints, dimensions, focusMode, overlayColors]);
 
   const renderLinesOv = useCallback(() => {
     const v = videoRef.current;
@@ -786,13 +816,13 @@ export default function VideoPlayerTab({
     if (role === "avoid" || role === "caution") setShowDangerZone(true);
   }, []);
 
-  const targetIconColor = "#16A34A";
-  const targetIconFill = "rgba(22, 163, 74, 0.18)";
+  const targetIconColor = overlayColors.target;
+  const targetIconFill = hexToRgba(overlayColors.target, 0.18);
   const targetIconShadow = `drop-shadow(0 0 9px ${targetIconColor})`;
 
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(6,15,24,0.98),rgba(5,11,18,0.95))]">
-      {showToolbars && (
+      {showToolbars && !surgicalWorkspace && (
         <div className="border-b border-white/[0.06] bg-[linear-gradient(180deg,rgba(6,15,24,0.97),rgba(5,11,18,0.94))] px-4 py-2.5 backdrop-blur-xl">
           <div className="flex items-center gap-3">
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -954,23 +984,55 @@ export default function VideoPlayerTab({
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <SideBar
-          isOpen
-          zones={detectedZones.filter(z => currentZoneNames.has(z.id))}
-          legendHidden={legendHidden}
-          hoveredZoneName={hoveredZoneName}
-          pinnedZoneName={pinnedZoneName}
-          onLegendToggle={() => setLegendHidden((value) => !value)}
-          onZoneHover={setHoveredZoneName}
-          onZonePin={handleLegendZonePin}
-        />
+        {!surgicalWorkspace && (
+          <SideBar
+            isOpen
+            zones={detectedZones.filter(z => currentZoneNames.has(z.id))}
+            legendHidden={legendHidden}
+            hoveredZoneName={hoveredZoneName}
+            pinnedZoneName={pinnedZoneName}
+            onLegendToggle={() => setLegendHidden((value) => !value)}
+            onZoneHover={setHoveredZoneName}
+            onZonePin={handleLegendZonePin}
+          />
+        )}
 
         <div className="flex flex-1 flex-col overflow-hidden">
           {videoSrc ? (
-            <div className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(12,30,42,0.42),rgba(4,8,12,0.94))]">
+            <div data-testid="video-export-stage" className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(12,30,42,0.42),rgba(4,8,12,0.94))]">
+              {surgicalWorkspace && (
+                <SurgicalAssistRail
+                  playing={playing}
+                  loading={loading}
+                  guidanceMode={guidanceMode}
+                  currentFrame={currentFrame}
+                  currentTime={currentTime}
+                  duration={duration}
+                  showOverlay={showOverlay}
+                  showZoneLabels={showZoneLabels}
+                  showFullLabels={showFullLabels}
+                  showTargetZone={showTargetZone}
+                  showDangerZone={showDangerZone}
+                  showToolZones={showToolZones}
+                  showMasks={showMasks}
+                  showLines={showLines}
+                  hasMasks={frameRleMasks.length > 0}
+                  hasLines={framePoints.some((f) => f.lines.length > 0)}
+                  activeZones={detectedZones.filter(z => currentZoneNames.has(z.id))}
+                  onPlayToggle={togglePlay}
+                  onOverlayToggle={() => setShowOverlay((v) => !v)}
+                  onLabelsToggle={() => setShowZoneLabels((v) => !v)}
+                  onFullLabelsToggle={() => setShowFullLabels((v) => !v)}
+                  onTargetToggle={() => setShowTargetZone((v) => !v)}
+                  onDangerToggle={() => setShowDangerZone((v) => !v)}
+                  onToolsToggle={() => setShowToolZones((v) => !v)}
+                  onMasksToggle={() => setShowMasks((v) => !v)}
+                  onLinesToggle={() => setShowLines((v) => !v)}
+                />
+              )}
               <div
                 ref={containerRef}
-                className="absolute inset-0"
+                className={surgicalWorkspace ? "absolute inset-y-0 left-0 right-20 xl:right-24" : "absolute inset-0"}
                 onMouseEnter={() => setIsMouseOverVideo(true)}
                 onMouseLeave={() => setIsMouseOverVideo(false)}
               >
@@ -1082,19 +1144,40 @@ export default function VideoPlayerTab({
                   <svg className="pointer-events-none absolute inset-0 z-[12] h-full w-full" viewBox={`0 0 ${dimensions.width} ${dimensions.height}`} preserveAspectRatio="xMidYMid meet">
                     {targetBounds && (
                       <g transform={`translate(${targetBounds.cx * dimensions.width}, ${targetBounds.cy * dimensions.height})`}>
-                        <circle r="22" fill={targetIconFill} stroke={targetIconColor} strokeWidth="2.4" style={{ filter: targetIconShadow }}>
-                          <animate attributeName="r" values="20;24;20" dur="2.2s" repeatCount="indefinite" />
-                          <animate attributeName="opacity" values="0.95;0.62;0.95" dur="2.2s" repeatCount="indefinite" />
-                        </circle>
-                        <circle r="12" fill="none" stroke="#dcfce7" strokeWidth="1.6" opacity="0.95">
-                          <animate attributeName="r" values="10;13;10" dur="2.2s" repeatCount="indefinite" />
-                        </circle>
-                        <line x1="-36" y1="0" x2="-16" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
-                        <line x1="16" y1="0" x2="36" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
-                        <line x1="0" y1="-36" x2="0" y2="-16" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
-                        <line x1="0" y1="16" x2="0" y2="36" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
-                        <circle r="5.2" fill="#dcfce7" stroke={targetIconColor} strokeWidth="2.2" style={{ filter: targetIconShadow }} />
-                        <circle r="1.8" fill="#052e16" />
+                        {targetIconStyle === "pulse" ? (
+                          <>
+                            <circle r="18" fill={targetIconFill} stroke={targetIconColor} strokeWidth="2.4" style={{ filter: targetIconShadow }}>
+                              <animate attributeName="r" values="16;34;16" dur="1.8s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.95;0.18;0.95" dur="1.8s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="7" fill="#dcfce7" stroke={targetIconColor} strokeWidth="2.2" />
+                          </>
+                        ) : targetIconStyle === "crosshair" ? (
+                          <>
+                            <circle r="18" fill="none" stroke={targetIconColor} strokeWidth="2.2" strokeDasharray="5 6" style={{ filter: targetIconShadow }} />
+                            <line x1="-42" y1="0" x2="-10" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <line x1="10" y1="0" x2="42" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <line x1="0" y1="-42" x2="0" y2="-10" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <line x1="0" y1="10" x2="0" y2="42" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <circle r="3.8" fill="#dcfce7" />
+                          </>
+                        ) : (
+                          <>
+                            <circle r="22" fill={targetIconFill} stroke={targetIconColor} strokeWidth="2.4" style={{ filter: targetIconShadow }}>
+                              <animate attributeName="r" values="20;24;20" dur="2.2s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.95;0.62;0.95" dur="2.2s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r="12" fill="none" stroke="#dcfce7" strokeWidth="1.6" opacity="0.95">
+                              <animate attributeName="r" values="10;13;10" dur="2.2s" repeatCount="indefinite" />
+                            </circle>
+                            <line x1="-36" y1="0" x2="-16" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <line x1="16" y1="0" x2="36" y2="0" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <line x1="0" y1="-36" x2="0" y2="-16" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <line x1="0" y1="16" x2="0" y2="36" stroke={targetIconColor} strokeWidth="3" strokeLinecap="round" />
+                            <circle r="5.2" fill="#dcfce7" stroke={targetIconColor} strokeWidth="2.2" style={{ filter: targetIconShadow }} />
+                            <circle r="1.8" fill="#052e16" />
+                          </>
+                        )}
                       </g>
                     )}
                   </svg>
@@ -1135,7 +1218,7 @@ export default function VideoPlayerTab({
             </div>
           )}
 
-          {videoSrc && showToolbars && (
+          {videoSrc && showToolbars && !surgicalWorkspace && (
             <div className="flex items-center gap-3 border-t border-white/[0.06] bg-[linear-gradient(180deg,rgba(6,15,24,0.94),rgba(5,11,18,0.97))] px-4 py-2.5 backdrop-blur-xl">
               <button
                 onClick={togglePlay}
@@ -1172,5 +1255,143 @@ export default function VideoPlayerTab({
         </div>
       </div>
     </main>
+  );
+}
+
+function SurgicalAssistRail({
+  playing,
+  loading,
+  guidanceMode,
+  currentFrame,
+  currentTime,
+  duration,
+  showOverlay,
+  showZoneLabels,
+  showFullLabels,
+  showTargetZone,
+  showDangerZone,
+  showToolZones,
+  showMasks,
+  showLines,
+  hasMasks,
+  hasLines,
+  activeZones,
+  onPlayToggle,
+  onOverlayToggle,
+  onLabelsToggle,
+  onFullLabelsToggle,
+  onTargetToggle,
+  onDangerToggle,
+  onToolsToggle,
+  onMasksToggle,
+  onLinesToggle,
+}: {
+  playing: boolean;
+  loading: boolean;
+  guidanceMode: "voice" | "text" | "both";
+  currentFrame: string;
+  currentTime: number;
+  duration: number;
+  showOverlay: boolean;
+  showZoneLabels: boolean;
+  showFullLabels: boolean;
+  showTargetZone: boolean;
+  showDangerZone: boolean;
+  showToolZones: boolean;
+  showMasks: boolean;
+  showLines: boolean;
+  hasMasks: boolean;
+  hasLines: boolean;
+  activeZones: Zone[];
+  onPlayToggle: () => void;
+  onOverlayToggle: () => void;
+  onLabelsToggle: () => void;
+  onFullLabelsToggle: () => void;
+  onTargetToggle: () => void;
+  onDangerToggle: () => void;
+  onToolsToggle: () => void;
+  onMasksToggle: () => void;
+  onLinesToggle: () => void;
+}) {
+  const zoneNames = activeZones.map((zone) => zone.name);
+  const dangerInView = zoneNames.some((name) => name === "Auricles" || name === "Aortic root");
+  const guidanceText = dangerInView
+    ? "Critical anatomy visible. Maintain target and danger overlays."
+    : "Guidance standing by.";
+
+  return (
+    <aside className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col border-l border-white/[0.08] bg-[#050910]/92 p-2 backdrop-blur-xl xl:w-24">
+      <div className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={onPlayToggle}
+          title={playing ? "Pause" : "Play"}
+          className="flex h-10 w-10 items-center justify-center rounded border border-cyan-300/25 bg-cyan-300/12 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/20"
+        >
+          {playing ? "II" : "▶"}
+        </button>
+        <RailButton label="OV" title="Overlay" active={showOverlay} onClick={onOverlayToggle} />
+        <RailButton label="TG" title="Target Zone" active={showTargetZone} onClick={onTargetToggle} />
+        <RailButton label="DZ" title="Danger Zone" active={showDangerZone} onClick={onDangerToggle} />
+        <RailButton label="TL" title="Tools" active={showToolZones} onClick={onToolsToggle} />
+        <RailButton label="LB" title="Labels" active={showZoneLabels} onClick={onLabelsToggle} />
+        <RailButton label="FN" title="Full Labels" active={showFullLabels} onClick={onFullLabelsToggle} />
+        {hasMasks && <RailButton label="MS" title="Masks" active={showMasks} onClick={onMasksToggle} />}
+        {hasLines && <RailButton label="LN" title="Lines" active={showLines} onClick={onLinesToggle} />}
+      </div>
+
+      <div className="mt-3 flex flex-1 flex-col justify-between gap-3 overflow-hidden">
+        <div className="space-y-2">
+          <div className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-2 text-center">
+            <div className="text-[9px] uppercase tracking-[0.14em] text-zinc-500">AI</div>
+            <div className="mt-1 text-[10px] capitalize text-zinc-200">{guidanceMode}</div>
+          </div>
+          {(guidanceMode === "text" || guidanceMode === "both") && (
+            <div className="rounded border border-emerald-300/15 bg-emerald-300/8 px-2 py-2 text-[10px] leading-4 text-emerald-100">
+              {guidanceText}
+            </div>
+          )}
+          <div className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-2 text-center">
+            <div className="text-[9px] uppercase tracking-[0.14em] text-zinc-500">Zones</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">{activeZones.length}</div>
+          </div>
+        </div>
+
+        <div className="space-y-2 text-center">
+          <div className="text-[10px] text-zinc-500">{currentFrame || (loading ? "Loading" : "Ready")}</div>
+          <div className="text-[10px] tabular-nums text-zinc-400">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function RailButton({
+  label,
+  title,
+  active,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={`${active ? "Hide" : "Show"} ${title}`}
+      onClick={onClick}
+      className={`flex h-9 w-10 items-center justify-center rounded border text-[10px] font-semibold transition-colors ${
+        active
+          ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
+          : "border-white/[0.08] bg-white/[0.035] text-zinc-500 hover:bg-white/[0.07] hover:text-zinc-200"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

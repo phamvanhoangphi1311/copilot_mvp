@@ -577,7 +577,7 @@ export default function VideoPlayerTab({ initialDir = "" }: VideoPlayerTabProps)
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Video area */}
           {videoSrc ? (
-            <div className="relative flex-1 bg-black overflow-hidden">
+            <div data-testid="video-export-stage" className="relative flex-1 bg-black overflow-hidden">
               <div
                 ref={containerRef}
                 className="absolute inset-0"

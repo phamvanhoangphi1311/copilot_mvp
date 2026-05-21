@@ -7,6 +7,7 @@ import {
   BoundaryZone,
   BoundaryRecord,
   LineAnnotation,
+  type BoundaryOverlayPalette,
 } from "@/lib/boundaryOverlay";
 import {
   renderSegmentationOverlay,
@@ -16,7 +17,7 @@ import { getColor, type MaskColor } from "@/lib/ImageTools";
 import SideBar from "@/components/SideBar";
 import { Zone } from "@/lib/types";
 import { BoundaryAnimationManager } from "@/lib/BoundaryAnimationManager";
-import { createClassifiedZone } from "@/lib/ZoneFactory";
+import { classifyZone, createClassifiedZone } from "@/lib/ZoneFactory";
 
 interface FramePoints {
   /** frame number extracted from image name */
@@ -35,6 +36,11 @@ interface VideoPlayerTabProps {
   initialPoints?: BoundaryRecord[];
   initialMasks?: Array<{ image: string; tags: SegmentationTag[] }>;
   prefetchedDir?: string;
+  surgicalWorkspace?: boolean;
+  initialShowOverlay?: boolean;
+  initialShowFullLabels?: boolean;
+  guidanceMode?: "voice" | "text" | "both";
+  overlayColors?: BoundaryOverlayPalette;
 }
 
 // ── Canvas / frame utilities ────────────────────────────────────────────────────────
@@ -57,6 +63,11 @@ export default function VideoPlayerTab({
   initialPoints = [],
   initialMasks = [],
   prefetchedDir = "",
+  surgicalWorkspace = false,
+  initialShowOverlay = true,
+  initialShowFullLabels = false,
+  guidanceMode = "both",
+  overlayColors,
 }: VideoPlayerTabProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -70,9 +81,9 @@ export default function VideoPlayerTab({
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showOverlay, setShowOverlay] = useState(true);
+  const [showOverlay, setShowOverlay] = useState(initialShowOverlay);
   const [showSafeZones, setShowSafeZones] = useState(false);
-  const [showFullLabels, setShowFullLabels] = useState(false);
+  const [showFullLabels, setShowFullLabels] = useState(initialShowFullLabels);
   const [fps, setFps] = useState(18);
   const [currentFrame, setCurrentFrame] = useState<string>("");
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -89,7 +100,7 @@ export default function VideoPlayerTab({
 
   const [showMasks, setShowMasks] = useState(false);
   const [showLines, setShowLines] = useState(true);
-  const [showToolbars, setShowToolbars] = useState(true);
+  const [showToolbars, setShowToolbars] = useState(!surgicalWorkspace);
   const [isMouseOverVideo, setIsMouseOverVideo] = useState(false);
 
   // Derive Zone[] from all frame masks for SideBar.
@@ -370,8 +381,9 @@ export default function VideoPlayerTab({
       showSafeZones,
       false,
       !showFullLabels,
+      overlayColors,
     );
-  }, [showOverlay, getZonesForTime, dimensions, fps, framePoints, showSafeZones, showFullLabels]);
+  }, [showOverlay, getZonesForTime, dimensions, fps, framePoints, showSafeZones, showFullLabels, overlayColors]);
 
   // Draws line annotations onto `linesCanvasRef` for the current frame.
   // Skips the render when the frame index has not changed since the last call
@@ -500,7 +512,7 @@ export default function VideoPlayerTab({
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-zinc-950">
       {/* Header bar */}
-      {showToolbars && (
+      {showToolbars && !surgicalWorkspace && (
       <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-2">
         <span className="text-xs font-medium uppercase tracking-wider text-zinc-500 shrink-0">
           Video Player
@@ -612,42 +624,70 @@ export default function VideoPlayerTab({
 
       {/* Body: sidebar + video */}
       <div className="flex flex-1 overflow-hidden">
-        <SideBar
-          isOpen
-          zones={detectedZones.filter((z) => currentZoneNames.has(z.id))}
-        />
+        {!surgicalWorkspace && (
+          <SideBar
+            isOpen
+            zones={detectedZones.filter((z) => currentZoneNames.has(z.id))}
+          />
+        )}
 
         {/* Video + controls column */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Video area */}
           {videoSrc ? (
-            <div className="relative flex-1 bg-black overflow-hidden">
+            <div data-testid="video-export-stage" className="relative flex-1 bg-black overflow-hidden">
+              {surgicalWorkspace && (
+                <SurgicalAssistRail
+                  playing={playing}
+                  loading={loading}
+                  guidanceMode={guidanceMode}
+                  currentFrame={currentFrame}
+                  currentTime={currentTime}
+                  duration={duration}
+                  showOverlay={showOverlay}
+                  showFullLabels={showFullLabels}
+                  showSafeZones={showSafeZones}
+                  showMasks={showMasks}
+                  showLines={showLines}
+                  hasMasks={frameRleMasks.length > 0}
+                  hasLines={framePoints.some((f) => f.lines.length > 0)}
+                  activeZones={detectedZones.filter((z) => currentZoneNames.has(z.id))}
+                  onPlayToggle={togglePlay}
+                  onOverlayToggle={() => setShowOverlay((v) => !v)}
+                  onFullLabelsToggle={() => setShowFullLabels((v) => !v)}
+                  onSafeZonesToggle={() => setShowSafeZones((v) => !v)}
+                  onMasksToggle={() => setShowMasks((v) => !v)}
+                  onLinesToggle={() => setShowLines((v) => !v)}
+                />
+              )}
               <div
                 ref={containerRef}
-                className="absolute inset-0"
+                className={surgicalWorkspace ? "absolute inset-y-0 left-0 right-20 xl:right-24" : "absolute inset-0"}
                 onMouseEnter={() => setIsMouseOverVideo(true)}
                 onMouseLeave={() => setIsMouseOverVideo(false)}
               >
                 {/* Toolbar toggle button */}
-                <button
-                  onClick={() => setShowToolbars((v) => !v)}
-                  title={showToolbars ? "Hide toolbars" : "Show toolbars"}
-                  className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded bg-black/50 text-zinc-400 hover:bg-black/70 hover:text-zinc-100 transition-colors"
-                >
-                  {showToolbars ? (
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <rect x="3" y="4" width="18" height="3" rx="1" fill="currentColor" stroke="none" />
-                      <rect x="3" y="17" width="18" height="3" rx="1" fill="currentColor" stroke="none" />
-                      <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
-                    </svg>
-                  ) : (
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <rect x="3" y="4" width="18" height="3" rx="1" fill="currentColor" stroke="none" opacity="0.4" />
-                      <rect x="3" y="17" width="18" height="3" rx="1" fill="currentColor" stroke="none" opacity="0.4" />
-                      <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
-                    </svg>
-                  )}
-                </button>
+                {!surgicalWorkspace && (
+                  <button
+                    onClick={() => setShowToolbars((v) => !v)}
+                    title={showToolbars ? "Hide toolbars" : "Show toolbars"}
+                    className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded bg-black/50 text-zinc-400 hover:bg-black/70 hover:text-zinc-100 transition-colors"
+                  >
+                    {showToolbars ? (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="3" rx="1" fill="currentColor" stroke="none" />
+                        <rect x="3" y="17" width="18" height="3" rx="1" fill="currentColor" stroke="none" />
+                        <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
+                      </svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <rect x="3" y="4" width="18" height="3" rx="1" fill="currentColor" stroke="none" opacity="0.4" />
+                        <rect x="3" y="17" width="18" height="3" rx="1" fill="currentColor" stroke="none" opacity="0.4" />
+                        <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </button>
+                )}
                 <video
                   ref={videoRef}
                   src={videoSrc}
@@ -722,7 +762,7 @@ export default function VideoPlayerTab({
           )}
 
           {/* Playback controls bar */}
-          {videoSrc && showToolbars && (
+          {videoSrc && showToolbars && !surgicalWorkspace && (
             <div className="flex items-center gap-3 border-t border-zinc-800 px-4 py-2">
               <button
                 onClick={togglePlay}
@@ -760,6 +800,128 @@ export default function VideoPlayerTab({
         </div>
       </div>
     </main>
+  );
+}
+
+function SurgicalAssistRail({
+  playing,
+  loading,
+  guidanceMode,
+  currentFrame,
+  currentTime,
+  duration,
+  showOverlay,
+  showFullLabels,
+  showSafeZones,
+  showMasks,
+  showLines,
+  hasMasks,
+  hasLines,
+  activeZones,
+  onPlayToggle,
+  onOverlayToggle,
+  onFullLabelsToggle,
+  onSafeZonesToggle,
+  onMasksToggle,
+  onLinesToggle,
+}: {
+  playing: boolean;
+  loading: boolean;
+  guidanceMode: "voice" | "text" | "both";
+  currentFrame: string;
+  currentTime: number;
+  duration: number;
+  showOverlay: boolean;
+  showFullLabels: boolean;
+  showSafeZones: boolean;
+  showMasks: boolean;
+  showLines: boolean;
+  hasMasks: boolean;
+  hasLines: boolean;
+  activeZones: Zone[];
+  onPlayToggle: () => void;
+  onOverlayToggle: () => void;
+  onFullLabelsToggle: () => void;
+  onSafeZonesToggle: () => void;
+  onMasksToggle: () => void;
+  onLinesToggle: () => void;
+}) {
+  const dangerCount = activeZones.filter((zone) => classifyZone(zone.name) === "danger").length;
+  const guidanceText = dangerCount > 0
+    ? "Danger zone in view. Keep boundary overlay active."
+    : "Guidance standing by.";
+
+  return (
+    <aside className="absolute inset-y-0 right-0 z-30 flex w-20 flex-col border-l border-white/[0.08] bg-[#050910]/92 p-2 backdrop-blur-xl xl:w-24">
+      <div className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={onPlayToggle}
+          title={playing ? "Pause" : "Play"}
+          className="flex h-10 w-10 items-center justify-center rounded border border-cyan-300/25 bg-cyan-300/12 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/20"
+        >
+          {playing ? "II" : "▶"}
+        </button>
+        <RailButton label="OV" title="Overlay" active={showOverlay} onClick={onOverlayToggle} />
+        <RailButton label="LB" title="Full Labels" active={showFullLabels} onClick={onFullLabelsToggle} />
+        <RailButton label="SZ" title="Safe Zones" active={showSafeZones} onClick={onSafeZonesToggle} />
+        {hasMasks && <RailButton label="MS" title="Masks" active={showMasks} onClick={onMasksToggle} />}
+        {hasLines && <RailButton label="LN" title="Lines" active={showLines} onClick={onLinesToggle} />}
+      </div>
+
+      <div className="mt-4 flex flex-1 flex-col justify-between gap-3 overflow-hidden">
+        <div className="space-y-2">
+          <div className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-2 text-center">
+            <div className="text-[9px] uppercase tracking-[0.14em] text-zinc-500">AI</div>
+            <div className="mt-1 text-[10px] capitalize text-zinc-200">{guidanceMode}</div>
+          </div>
+          {(guidanceMode === "text" || guidanceMode === "both") && (
+            <div className="rounded border border-emerald-300/15 bg-emerald-300/8 px-2 py-2 text-[10px] leading-4 text-emerald-100">
+              {guidanceText}
+            </div>
+          )}
+          <div className="rounded border border-white/[0.08] bg-white/[0.035] px-2 py-2 text-center">
+            <div className="text-[9px] uppercase tracking-[0.14em] text-zinc-500">Zones</div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">{activeZones.length}</div>
+          </div>
+        </div>
+
+        <div className="space-y-2 text-center">
+          <div className="text-[10px] text-zinc-500">{currentFrame || (loading ? "Loading" : "Ready")}</div>
+          <div className="text-[10px] tabular-nums text-zinc-400">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function RailButton({
+  label,
+  title,
+  active,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={`${active ? "Hide" : "Show"} ${title}`}
+      onClick={onClick}
+      className={`flex h-9 w-10 items-center justify-center rounded border text-[10px] font-semibold transition-colors ${
+        active
+          ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
+          : "border-white/[0.08] bg-white/[0.035] text-zinc-500 hover:bg-white/[0.07] hover:text-zinc-200"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
